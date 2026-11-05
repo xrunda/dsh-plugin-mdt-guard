@@ -48,6 +48,8 @@ const NESTED_KEYS = {
   tools: TOOLS_KEYS,
 };
 
+const NESTED_SECTIONS = ['classifier', 'audit', 'tools'];
+
 const INTEGER_BOUNDS = {
   'classifier.timeoutMs': [100, 60000],
   'classifier.maxTokens': [1, 4096],
@@ -107,13 +109,24 @@ function requireNonEmptyString(value, field) {
 }
 
 function requireStringArray(value, field) {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+  if (!Array.isArray(value)) {
     fail(CONFIG_FIELD_INVALID, field);
+  }
+  // The array iterator does not skip holes, so sparse arrays are rejected
+  // instead of silently normalizing to `undefined` values.
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      fail(CONFIG_FIELD_INVALID, field);
+    }
   }
 }
 
 function requireIntegerInRange(value, field) {
-  const [minimum, maximum] = INTEGER_BOUNDS[field];
+  const bounds = INTEGER_BOUNDS[field];
+  if (bounds === undefined) {
+    fail(CONFIG_FIELD_INVALID, field);
+  }
+  const [minimum, maximum] = bounds;
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
     fail(CONFIG_FIELD_INVALID, field);
   }
@@ -154,14 +167,14 @@ export function validateConfig(input) {
 
   rejectUnknownKeys(input, TOP_LEVEL_KEYS);
 
-  for (const key of ['classifier', 'audit', 'tools']) {
+  for (const key of NESTED_SECTIONS) {
     const value = input[key];
     if (value !== undefined && !isPlainObject(value)) {
       fail(CONFIG_FIELD_INVALID, key);
     }
   }
 
-  for (const key of ['classifier', 'audit', 'tools']) {
+  for (const key of NESTED_SECTIONS) {
     const value = input[key];
     if (value !== undefined) {
       rejectUnknownKeys(value, NESTED_KEYS[key], key);
