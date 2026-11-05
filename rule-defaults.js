@@ -13,7 +13,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.prompt-injection',
     category: 'H',
-    source: String.raw`(忽略|无视|忘记|忘掉|跳过|绕过|不要遵守|别管|不要管|不用管|不必遵守).{0,8}(指令|规则|提示词|提示|系统提示|内部规则|安全策略|内容政策|约束|设定|(?:你的|你们的|系统|安全|内容)(?:限制|约束))|(?:ignore|disregard|forget|bypass|override|skip).{0,24}(?:previous|prior|above|earlier|all|any|system|your).{0,24}(?:instructions?|rules?|prompts?|constraints?|guidelines?)`,
+    source: String.raw`(忽略|无视|忘记|忘掉|跳过|绕过|不要遵守|别管|不要管|不用管|不必遵守).{0,8}(指令|规则|提示词|提示|系统提示|内部规则|安全策略|内容政策|设定|(?:你的|你们的|系统|安全|内容)(?:限制|约束))|(?:ignore|disregard|forget|bypass|override|skip).{0,24}(?:previous|prior|above|earlier|all|any|system|your).{0,24}(?:instructions?|rules?|prompts?|constraints?|guidelines?)`,
   }),
   Object.freeze({
     id: 'hard-deny.role-switch',
@@ -43,7 +43,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.read-sensitive',
     category: 'G',
-    source: String.raw`(读取|查看|看看|看下|看一下|瞅瞅|查一下|查下|打印|输出|显示|导出|列出|打开|获取|给我|发我|读出|贴出来|dump|cat|echo|print|show|read|list|export|give\s+me).{0,12}(配置|config(?:\.json)?|guard\.json|settings\.ya?ml|\.env|环境变量|env(?:ironment)?\s*(?:vars?|variables?)|日志|log(?:s)?|令牌|token|密钥|secret|api\s*key|证书|cert(?:ificate)?)`,
+    source: String.raw`(读取|查看|看看|看下|看一下|瞅瞅|查一下|查下|打印|输出|显示|导出|列出|打开|获取|给我|发我|读出|贴出来|dump|cat|echo|print|show|read|list|export|give\s+me).{0,12}(配置(?!好?(?:的)?(?:药液|药水|药品|药物|药剂|药膏|液体|溶液|输液|盐水|葡萄糖))|config(?:\.json)?|guard\.json|settings\.ya?ml|\.env|环境变量|env(?:ironment)?\s*(?:vars?|variables?)|日志|log(?:s)?|令牌|token|密钥|secret|api\s*key|证书|cert(?:ificate)?)`,
   }),
   Object.freeze({
     id: 'hard-deny.read-sensitive-reverse',
@@ -63,12 +63,12 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.config-modify',
     category: 'G',
-    source: String.raw`(修改|更改|改一下|改掉|改|编辑|写入|覆盖|删除|删掉|清空|重置|更新).{0,12}(配置(?:文件|项|参数)?|config(?:\.json)?|guard\.json|settings\.ya?ml|插件配置|系统配置|环境变量|\.env|系统设置|注册表|日志|HIS\s*(?:地址|配置))|(?:modify|change|edit|write|overwrite|delete|clear|reset|update).{0,16}(?:config(?:\.json)?|guard\.json|settings\.ya?ml|environment\s*variables?|registry|\.env|logs?)`,
+    source: String.raw`(修改|更改|改一下|改掉|改|编辑|写入|覆盖|删除|删掉|清空|重置|更新).{0,12}(配置(?!好?(?:的)?(?:药液|药水|药品|药物|药剂|药膏|液体|溶液|输液|盐水|葡萄糖))(?:文件|项|参数)?|config(?:\.json)?|guard\.json|settings\.ya?ml|插件配置|系统配置|环境变量|\.env|系统设置|注册表|日志|HIS\s*(?:地址|配置))|(?:modify|change|edit|write|overwrite|delete|clear|reset|update).{0,16}(?:config(?:\.json)?|guard\.json|settings\.ya?ml|environment\s*variables?|registry|\.env|logs?)`,
   }),
   Object.freeze({
     id: 'hard-deny.service-ops',
     category: 'G',
-    source: String.raw`(?:重启|启动|停止|关闭|杀掉).{0,8}(?:服务|进程|插件|dsh|系统(?=$|\s*(?:[!！。,.，?？;；:：、~～]|并|后|再|然后|之后|服务|进程|配置|设置|日志|故障|异常|错误|文件|目录|环境))|主机|服务器|容器)|(?:排查|调试|诊断|修复).{0,8}(?:服务|进程|插件|dsh|主机|服务器|容器|操作系统|系统故障|系统异常|系统错误|系统服务|系统进程|系统配置|系统设置|系统日志|系统环境|系统文件|系统目录)|(?:restart|start|stop|kill|debug|diagnose|fix).{0,16}(?:service|process|plugin|dsh|server|container|host)`,
+    source: String.raw`(?:重启|启动|停止|关闭|杀掉)(?:.{0,8}(?:服务|进程|插件|dsh|操作系统|主机|服务器|容器)|\s*(?:(?:一下|下|所有|全部|整个|该|本|当前|本机|本地|远程|这台|那台)\s*)?系统(?=$|\s*(?:[!！。,.，?？;；:：、~～…]|吧|啊|了|呢|呀|嘛|呗|并|后|再|然后|之后|服务|进程|配置|设置|日志|故障|异常|错误|文件|目录|环境)))|(?:排查|调试|诊断|修复).{0,8}(?:服务|进程|插件|dsh|主机|服务器|容器|操作系统|系统故障|系统异常|系统错误|系统服务|系统进程|系统配置|系统设置|系统日志|系统环境|系统文件|系统目录)|(?:restart|start|stop|kill|debug|diagnose|fix).{0,16}(?:service|process(?!\s+(?:of|for)\b)|plugin|dsh|server|container|host)`,
   }),
 ]);
 

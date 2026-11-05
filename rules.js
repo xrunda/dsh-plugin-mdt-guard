@@ -35,6 +35,13 @@ import {
 // `isWhitespaceOnlySource` so both entry points reject the same sources.
 const WHITESPACE_RUN = /[\s\u0085]+/g;
 
+// The compact variant removes whitespace only when it sits between two
+// non-ASCII characters. Its purpose is separators inserted inside a CJK token
+// (`打 印`); removing whitespace between ASCII tokens too would merge English
+// words (`start the process of` -> `starttheprocessof`) and defeat English
+// word boundaries.
+const COMPACT_WHITESPACE_RUN = /(?<=[^\x00-\x7F])[\s\u0085]+(?=[^\x00-\x7F])/g;
+
 function fail(code, field) {
   throw createConfigError(code, field);
 }
@@ -178,8 +185,11 @@ export function compileRules(config) {
  * 1. Cf format characters and variation selectors are erased, whitespace
  *    collapses to one space: English token spacing such as `show system
  *    prompt` is preserved.
- * 2. The same stripped text has all whitespace removed: separators inserted
- *    inside a CJK token (`打 印 config.json`) are caught.
+ * 2. The same stripped text has whitespace removed only when it separates two
+ *    non-ASCII characters: separators inserted inside a CJK token
+ *    (`打 印 config.json`) are caught without merging ASCII tokens, so an
+ *    English phrase such as `start the process of` never becomes
+ *    `starttheprocessof`.
  * 3. Each Cf format character and variation selector is replaced by one
  *    space instead of being erased: a format character cannot silently
  *    replace an inter-token space (`give<Cf>me` still matches `give me`).
@@ -191,7 +201,7 @@ function normalizeVariants(text) {
   const folded = text.normalize('NFKC');
   const stripped = stripFormatCharacters(folded).trim();
   const collapsed = stripped.replace(WHITESPACE_RUN, ' ').trim();
-  const compact = stripped.replace(WHITESPACE_RUN, '');
+  const compact = stripped.replace(COMPACT_WHITESPACE_RUN, '');
   const spaced = replaceFormatCharactersWithSpace(folded)
     .replace(WHITESPACE_RUN, ' ')
     .trim();
