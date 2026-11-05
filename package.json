@@ -16,6 +16,7 @@
     "config.js",
     "rules.js",
     "rule-defaults.js",
+    "session-state.js",
     "types/contracts.d.ts",
     "locale/en.json",
     "locale/zh.json",
