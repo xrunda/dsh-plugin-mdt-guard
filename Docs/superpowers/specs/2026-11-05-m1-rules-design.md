@@ -85,6 +85,15 @@ as follows:
 The built-in catalogs are defined once in `rule-defaults.js` and shared by
 the validator and the rule compiler, so defaults and metadata cannot drift.
 
+Built-in identity and the normalization-stability exemption are scoped to the
+field: a source counts as built-in for `hardDeny` only when it exactly matches
+a hard-deny catalog source, and likewise for `fastAllow`. An exact source from
+the other catalog is treated as a custom source. It is subject to the stability
+check, and if it is stable it compiles as a `<field>[<index>]` entry with
+`category: null`; if the cross-field source is unstable (for example a
+hard-deny source containing full-width punctuation supplied under `fastAllow`),
+it is rejected with `CONFIG_RULE_UNSTABLE` rather than exempted.
+
 ## Built-in Rule Catalog
 
 ### Hard deny (G: system/ops, H: injection)
@@ -253,17 +262,21 @@ export function evaluateRules(ruleSet, text) -> {
   scanning respects backslash parity, so `\\u200B` (an escaped backslash
   followed by the literal text `u200B`) stays stable. A single internal
   literal space between non-space characters is permitted because it is
-  meaningful. An escaped `U+0020` (`\x20`, `\u{20}`, `\ `) is rejected when it
+  meaningful. An escaped `U+0020` (`\x20`, `\u0020`, `\ `) is rejected when it
   sits at the very start or end of the source, directly after a leading `^`,
   or directly before a trailing `$`, because input is trimmed before matching
   (`\x20foo`, `\u0020foo`, `foo\x20`, `^\x20foo$`, `foo\x20$`, `\ foo`); an internal
   escaped space such as `a\x20b` or `a\ b` still compiles and matches `a b`.
+  Because the regex flags are `i` without `u`, `\u{...}` is not a real
+  code-point escape (`\u` is an identity escape and `{...}` is a quantifier).
+  The scanner still reads it as one and rejects `\u{20}foo` conservatively,
+  even though that pattern does not actually target U+0020.
   The check is conservative: it does not prove that a source can match,
   arbitrary regex semantics are not fully analysed, and only direct
   anchor-adjacent escaped spaces are detected, not arbitrary nesting such as
-  `(?:^\x20)`. Exact built-in
-  sources are exempt because some legitimately contain full-width punctuation;
-  built-ins are not affected by this validation.
+  `(?:^\x20)`. Exact built-in sources from the field's own catalog are exempt
+  because some legitimately contain full-width punctuation; an exact source
+  from the other catalog is not exempt and is checked as a custom source.
 - Only non-empty sources are compiled. A source with invalid syntax raises
   `CONFIG_RULE_INVALID` with the indexed field.
 - Message templates identify the field only. No pattern, input text, parser
@@ -426,8 +439,12 @@ export function evaluateRules(ruleSet, text) -> {
   prove an escaped backslash (`\\u200B`), a single internal literal space
   (`^foo bar$`), `[^ ]`, and internal escaped spaces (`a\x20b`, `a\ b`, both
   matching `a b`) are accepted.
-  An exact built-in source (including the full-width-punctuation greeting)
-  still compiles with its catalog identity.
+  An exact built-in source from the same field (including the
+  full-width-punctuation greeting) still compiles with its catalog identity.
+  An exact source from the other field does not: a stable cross-field source
+  compiles as an indexed custom rule with `category: null`, and an unstable
+  cross-field source is rejected with `CONFIG_RULE_UNSTABLE` by both
+  `validateConfig` and `compileRules` at the indexed field.
 - Priority test: a message matching both a hard-deny and fast-allow rule is
   denied; the hard-deny rule ID is returned.
 - Override tests: omitted and empty arrays use built-ins; a non-empty custom

@@ -204,6 +204,12 @@ export function isWhitespaceOnlySource(source) {
 // escapes. Numeric backreferences `\1`-`\9` are intentionally not analysed:
 // they are ambiguous with legacy octal escapes and out of scope for this
 // simple stability check.
+//
+// `RULE_REGEX_FLAGS` is `'i'` without `u`, so `\u{...}` is not a code-point
+// escape: `\u` falls back to an identity escape and `{...}` is a quantifier.
+// This scanner still reads `\u{...}` as a code-point escape and applies the
+// same stability check, so a source such as `\u{20}foo` is conservatively
+// rejected even though it does not target U+0020.
 const ESCAPE_SCAN =
   /\\(?:u\{([0-9A-Fa-f]+)}|u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|([tnrfv])|c([A-Za-z])|0([0-7]{1,2})|[pP]\{(Cf|C)})/g;
 
