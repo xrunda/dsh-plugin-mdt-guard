@@ -12,19 +12,11 @@
  * bypass validation.
  */
 
-import {
-  CONFIG_FIELD_INVALID,
-  CONFIG_RULE_INVALID,
-  CONFIG_RULE_UNSTABLE,
-  createConfigError,
-} from './config.js';
+import { validateRuleSourceArray } from './config.js';
 import {
   FAST_ALLOW_RULES,
   HARD_DENY_RULES,
   RULE_REGEX_FLAGS,
-  isBuiltInRuleSource,
-  isNormalizationStableSource,
-  isWhitespaceOnlySource,
   replaceFormatCharactersWithSpace,
   stripFormatCharacters,
 } from './rule-defaults.js';
@@ -32,12 +24,8 @@ import {
 // Collapse all whitespace, including U+0085 (NEL), to a single space. NEL is
 // matched explicitly because `\s` does not include it. The whitespace-only
 // source predicate itself is shared with config.js via
-// `isWhitespaceOnlySource` so both entry points reject the same sources.
+// `validateRuleSourceArray` so both entry points reject the same sources.
 const WHITESPACE_RUN = /[\s\u0085]+/g;
-
-function fail(code, field) {
-  throw createConfigError(code, field);
-}
 
 function isRuleConfig(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -76,55 +64,30 @@ function compileBuiltIns(rules) {
  *
  * An omitted field or an explicit empty array uses the built-in catalog. A
  * non-empty array replaces the whole built-in list for that field: entries
- * equal to a built-in source keep the catalog identity, all others become
- * `<field>[<index>]` with a `null` category.
+ * equal to a built-in source from the same field keep the catalog identity,
+ * all others become `<field>[<index>]` with a `null` category. Validation is
+ * delegated to `validateRuleSourceArray`, so `compileRules` and
+ * `validateConfig` keep identical error codes, indexed fields and ordering.
  */
 function compileField(value, field, builtInRules, builtInSourceMetadata) {
   if (value === undefined) {
     return compileBuiltIns(builtInRules);
   }
-  if (!Array.isArray(value)) {
-    fail(CONFIG_FIELD_INVALID, field);
-  }
-  if (value.length === 0) {
+  if (Array.isArray(value) && value.length === 0) {
     return compileBuiltIns(builtInRules);
   }
 
-  // The array iterator does not skip holes, so sparse arrays are rejected at
-  // the array field instead of silently normalizing to `undefined` items.
-  for (const item of value) {
-    if (typeof item !== 'string') {
-      fail(CONFIG_FIELD_INVALID, field);
-    }
-  }
+  validateRuleSourceArray(value, field);
 
   const compiled = [];
   for (const [index, source] of value.entries()) {
     const indexedField = `${field}[${index}]`;
-    if (isWhitespaceOnlySource(source)) {
-      fail(CONFIG_FIELD_INVALID, indexedField);
-    }
-
-    // A custom source containing characters evaluation normalization erases or
-    // folds could never match; reject it rather than compile a silently inert
-    // rule. Exact built-in sources keep their catalog identity and are exempt.
-    if (!isBuiltInRuleSource(source, field) && !isNormalizationStableSource(source)) {
-      fail(CONFIG_RULE_UNSTABLE, indexedField);
-    }
-
-    let regexp;
-    try {
-      regexp = new RegExp(source, RULE_REGEX_FLAGS);
-    } catch {
-      fail(CONFIG_RULE_INVALID, indexedField);
-    }
-
     const builtIn = builtInSourceMetadata.get(source);
     compiled.push(
       Object.freeze({
         id: builtIn === undefined ? indexedField : builtIn.id,
         category: builtIn === undefined ? null : builtIn.category,
-        regexp,
+        regexp: new RegExp(source, RULE_REGEX_FLAGS),
       }),
     );
   }

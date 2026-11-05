@@ -159,7 +159,11 @@ function requireStringArray(value, field) {
 }
 
 /**
- * Validate a regular-expression source array. Shape errors keep the existing
+ * Validate a regular-expression source array.
+ *
+ * Shared by `validateConfig` and `compileRules` so both entry points enforce
+ * exactly the same shape, whitespace, normalization-stability and regex
+ * contract. Shape errors keep the existing
  * `CONFIG_FIELD_INVALID` contract. Empty or whitespace-only sources are
  * rejected as `CONFIG_FIELD_INVALID` before compilation via the shared
  * `isWhitespaceOnlySource` predicate, which includes U+0085 (NEL) because
@@ -174,12 +178,17 @@ function requireStringArray(value, field) {
  * such characters, including control-letter (`\cI`) and octal (`\012`)
  * escapes, cannot behave as written. The stability check is conservative and
  * does not fully analyse arbitrary regex semantics; a single internal literal
- * space remains permitted. Exact built-in sources are exempt because some
- * legitimately contain full-width punctuation. A non-empty source that does
- * not compile raises `CONFIG_RULE_INVALID` for the indexed field only; no
- * source text is ever attached to the message.
+ * space remains permitted. Exact built-in sources from the field's own catalog
+ * are exempt because some legitimately contain full-width punctuation; an
+ * exact source from the other catalog is treated as custom. A non-empty source
+ * that does not compile raises `CONFIG_RULE_INVALID` for the indexed field
+ * only; no source text is ever attached to the message.
+ *
+ * @param {unknown} value
+ * @param {'hardDeny'|'fastAllow'} field
+ * @throws {ConfigError}
  */
-function requireRegexArray(value, field) {
+export function validateRuleSourceArray(value, field) {
   requireStringArray(value, field);
   for (const [index, source] of value.entries()) {
     const indexedField = `${field}[${index}]`;
@@ -286,7 +295,7 @@ export function validateConfig(input) {
   // array replaces the whole list. Each result is a fresh array.
   let hardDeny = [...HARD_DENY_DEFAULT_SOURCES];
   if (input.hardDeny !== undefined) {
-    requireRegexArray(input.hardDeny, 'hardDeny');
+    validateRuleSourceArray(input.hardDeny, 'hardDeny');
     if (input.hardDeny.length > 0) {
       hardDeny = [...input.hardDeny];
     }
@@ -294,7 +303,7 @@ export function validateConfig(input) {
 
   let fastAllow = [...FAST_ALLOW_DEFAULT_SOURCES];
   if (input.fastAllow !== undefined) {
-    requireRegexArray(input.fastAllow, 'fastAllow');
+    validateRuleSourceArray(input.fastAllow, 'fastAllow');
     if (input.fastAllow.length > 0) {
       fastAllow = [...input.fastAllow];
     }
