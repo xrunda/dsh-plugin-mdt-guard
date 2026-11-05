@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { ConfigError, loadConfig, validateConfig } from '../config.js';
+import { FAST_ALLOW_DEFAULT_SOURCES, HARD_DENY_DEFAULT_SOURCES } from '../rule-defaults.js';
 
 const refusalText =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
@@ -118,8 +119,8 @@ test('disabled configuration normalizes to the PRD defaults', () => {
     },
     contextTurns: 3,
     failOpen: true,
-    hardDeny: [],
-    fastAllow: [],
+    hardDeny: [...HARD_DENY_DEFAULT_SOURCES],
+    fastAllow: [...FAST_ALLOW_DEFAULT_SOURCES],
     refusalText,
     audit: {
       enabled: true,
@@ -226,10 +227,47 @@ test('each call returns fresh normalized objects rather than shared defaults', (
   first.tools.allow.push('mutated-tool');
   first.audit.retentionDays = 999;
 
-  assert.deepEqual(second.hardDeny, []);
-  assert.deepEqual(second.fastAllow, []);
+  assert.deepEqual(second.hardDeny, [...HARD_DENY_DEFAULT_SOURCES]);
+  assert.deepEqual(second.fastAllow, [...FAST_ALLOW_DEFAULT_SOURCES]);
   assert.deepEqual(second.tools.allow, []);
   assert.equal(second.audit.retentionDays, 30);
+});
+
+test('omitted and empty rule arrays use the built-in sources', () => {
+  const omitted = validateConfig({ enabled: false });
+  const empty = validateConfig({ enabled: false, hardDeny: [], fastAllow: [] });
+
+  assert.deepEqual(omitted.hardDeny, [...HARD_DENY_DEFAULT_SOURCES]);
+  assert.deepEqual(omitted.fastAllow, [...FAST_ALLOW_DEFAULT_SOURCES]);
+  assert.deepEqual(empty.hardDeny, omitted.hardDeny);
+  assert.deepEqual(empty.fastAllow, omitted.fastAllow);
+  assert.notEqual(empty.hardDeny, omitted.hardDeny);
+  assert.notEqual(empty.fastAllow, omitted.fastAllow);
+});
+
+test('non-empty rule arrays replace the built-in sources', () => {
+  const result = validateConfig({
+    enabled: false,
+    hardDeny: ['^custom-deny$'],
+    fastAllow: ['^custom-allow$'],
+  });
+
+  assert.deepEqual(result.hardDeny, ['^custom-deny$']);
+  assert.deepEqual(result.fastAllow, ['^custom-allow$']);
+});
+
+test('invalid rule regular expressions raise a sanitized CONFIG_RULE_INVALID error', () => {
+  for (const [field, input, forbidden] of [
+    ['hardDeny[0]', { hardDeny: ['(unclosed'] }, '(unclosed'],
+    ['fastAllow[1]', { fastAllow: ['^ok$', '[z-a]'] }, '[z-a]'],
+  ]) {
+    assertConfigError(
+      { enabled: false, ...input },
+      'CONFIG_RULE_INVALID',
+      field,
+      { label: field, forbidden: [forbidden] },
+    );
+  }
 });
 
 test('enabled configuration requires classifier.baseUrl and classifier.model', () => {
@@ -384,8 +422,8 @@ test('loadConfig resolves the default config path from the isolated home', async
     },
     contextTurns: 7,
     failOpen: true,
-    hardDeny: [],
-    fastAllow: [],
+    hardDeny: [...HARD_DENY_DEFAULT_SOURCES],
+    fastAllow: [...FAST_ALLOW_DEFAULT_SOURCES],
     refusalText,
     audit: {
       enabled: true,
@@ -508,8 +546,8 @@ test('loadConfig accepts a disabled config without classifier connection fields'
     },
     contextTurns: 3,
     failOpen: true,
-    hardDeny: [],
-    fastAllow: [],
+    hardDeny: [...HARD_DENY_DEFAULT_SOURCES],
+    fastAllow: [...FAST_ALLOW_DEFAULT_SOURCES],
     refusalText,
     audit: {
       enabled: true,

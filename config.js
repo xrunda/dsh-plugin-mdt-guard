@@ -12,6 +12,12 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import {
+  FAST_ALLOW_DEFAULT_SOURCES,
+  HARD_DENY_DEFAULT_SOURCES,
+  RULE_REGEX_FLAGS,
+} from './rule-defaults.js';
+
 const REFUSAL_TEXT =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
 
@@ -68,6 +74,7 @@ const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
 const CONFIG_UNKNOWN_FIELD = 'CONFIG_UNKNOWN_FIELD';
 const CONFIG_JSON_INVALID = 'CONFIG_JSON_INVALID';
 const CONFIG_READ_FAILED = 'CONFIG_READ_FAILED';
+const CONFIG_RULE_INVALID = 'CONFIG_RULE_INVALID';
 
 /**
  * Sanitized configuration error. Messages are built only from fixed templates
@@ -89,6 +96,7 @@ const ERROR_TEMPLATES = {
   [CONFIG_FIELD_REQUIRED]: 'Missing required configuration field',
   [CONFIG_FIELD_INVALID]: 'Invalid configuration field',
   [CONFIG_UNKNOWN_FIELD]: 'Unknown configuration field',
+  [CONFIG_RULE_INVALID]: 'Invalid regular expression in configuration field',
 };
 
 function fail(code, field) {
@@ -125,6 +133,23 @@ function requireStringArray(value, field) {
   for (const item of value) {
     if (typeof item !== 'string') {
       fail(CONFIG_FIELD_INVALID, field);
+    }
+  }
+}
+
+/**
+ * Validate a regular-expression source array. Shape errors keep the existing
+ * `CONFIG_FIELD_INVALID` contract. A source that does not compile raises
+ * `CONFIG_RULE_INVALID` for the indexed field only; the pattern itself is
+ * never attached to the message.
+ */
+function requireRegexArray(value, field) {
+  requireStringArray(value, field);
+  for (const [index, source] of value.entries()) {
+    try {
+      new RegExp(source, RULE_REGEX_FLAGS);
+    } catch {
+      fail(CONFIG_RULE_INVALID, `${field}[${index}]`);
     }
   }
 }
@@ -213,16 +238,23 @@ export function validateConfig(input) {
     refusalText = input.refusalText;
   }
 
-  let hardDeny = [];
+  // The built-in rule lists are the fail-safe default. An empty supplied
+  // array keeps them so hard-deny cannot be silently disabled; a non-empty
+  // array replaces the whole list. Each result is a fresh array.
+  let hardDeny = [...HARD_DENY_DEFAULT_SOURCES];
   if (input.hardDeny !== undefined) {
-    requireStringArray(input.hardDeny, 'hardDeny');
-    hardDeny = [...input.hardDeny];
+    requireRegexArray(input.hardDeny, 'hardDeny');
+    if (input.hardDeny.length > 0) {
+      hardDeny = [...input.hardDeny];
+    }
   }
 
-  let fastAllow = [];
+  let fastAllow = [...FAST_ALLOW_DEFAULT_SOURCES];
   if (input.fastAllow !== undefined) {
-    requireStringArray(input.fastAllow, 'fastAllow');
-    fastAllow = [...input.fastAllow];
+    requireRegexArray(input.fastAllow, 'fastAllow');
+    if (input.fastAllow.length > 0) {
+      fastAllow = [...input.fastAllow];
+    }
   }
 
   const classifier = {
