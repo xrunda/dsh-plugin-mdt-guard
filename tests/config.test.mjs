@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { validateConfig } from '../config.js';
+import { ConfigError, loadConfig, validateConfig } from '../config.js';
 
 const refusalText =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
@@ -42,6 +45,68 @@ function withField(path, value) {
   }
   target[path.at(-1)] = value;
   return input;
+}
+
+let sentinelSequence = 0;
+
+function uniqueSentinel(label) {
+  sentinelSequence += 1;
+  return `sentinel-${label}-${Date.now()}-${sentinelSequence}`;
+}
+
+async function makeTempDir(t) {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-mdt-guard-config-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+async function withIsolatedHome(home, fn) {
+  const originalHome = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    return await fn();
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+  }
+}
+
+async function assertLoadError(promise, code, secret) {
+  let captured;
+  await assert.rejects(promise, (error) => {
+    captured = error;
+    assert.ok(error instanceof ConfigError, 'expected a ConfigError instance');
+    assert.equal(error.name, 'ConfigError', 'expected ConfigError name');
+    assert.equal(error.code, code, 'unexpected error code');
+    assert.equal(error.cause, undefined, 'ConfigError must not attach a cause');
+    if (secret !== undefined) {
+      assert.ok(!error.message.includes(secret), 'error message must not include the secret');
+      assert.ok(!String(error).includes(secret), 'stringified error must not include the secret');
+    }
+    return true;
+  });
+  return captured;
+}
+
+async function captureConsole(fn) {
+  const methods = ['log', 'info', 'warn', 'error', 'debug'];
+  const originals = new Map();
+  const calls = [];
+  for (const method of methods) {
+    originals.set(method, console[method]);
+    console[method] = (...args) => calls.push([method, ...args]);
+  }
+  try {
+    await fn();
+  } finally {
+    for (const method of methods) {
+      console[method] = originals.get(method);
+    }
+  }
+  return calls;
 }
 
 test('disabled configuration normalizes to the PRD defaults', () => {
@@ -298,4 +363,214 @@ test('accepts each numeric lower and upper bound and rejects values outside them
       { label: `${path.join('.')}=${minimum + 0.5}` },
     );
   }
+});
+
+test('loadConfig resolves the default config path from the isolated home', async (t) => {
+  const home = await makeTempDir(t);
+  const configDir = join(home, '.dsh', 'mdt');
+  await mkdir(configDir, { recursive: true });
+  await writeFile(
+    join(configDir, 'guard.json'),
+    JSON.stringify({ enabled: false, contextTurns: 7 }),
+  );
+
+  const config = await withIsolatedHome(home, () => loadConfig());
+
+  assert.deepEqual(config, {
+    enabled: false,
+    classifier: {
+      timeoutMs: 1500,
+      maxTokens: 200,
+    },
+    contextTurns: 7,
+    failOpen: true,
+    hardDeny: [],
+    fastAllow: [],
+    refusalText,
+    audit: {
+      enabled: true,
+      storeText: false,
+      retentionDays: 30,
+    },
+    tools: {
+      allow: [],
+      deny: [],
+    },
+  });
+});
+
+test('loadConfig with an empty home applies enabled defaults and creates nothing', async (t) => {
+  const home = await makeTempDir(t);
+
+  const error = await withIsolatedHome(home, () =>
+    assertLoadError(loadConfig(), 'CONFIG_FIELD_REQUIRED', undefined),
+  );
+  assert.ok(error.message.includes('classifier.baseUrl'), 'error must identify classifier.baseUrl');
+
+  await assert.rejects(stat(join(home, '.dsh')), { code: 'ENOENT' });
+  await assert.rejects(stat(join(home, '.dsh', 'mdt', 'guard.json')), { code: 'ENOENT' });
+});
+
+test('loadConfig treats a missing explicit path as defaults and creates nothing', async (t) => {
+  const dir = await makeTempDir(t);
+  const filePath = join(dir, 'missing.json');
+
+  const error = await assertLoadError(loadConfig({ filePath }), 'CONFIG_FIELD_REQUIRED', undefined);
+  assert.ok(error.message.includes('classifier.baseUrl'), 'error must identify classifier.baseUrl');
+  await assert.rejects(stat(filePath), { code: 'ENOENT' });
+});
+
+test('loadConfig returns a normalized enabled configuration from disk', async (t) => {
+  const dir = await makeTempDir(t);
+  const filePath = join(dir, 'guard.json');
+  const supplied = {
+    enabled: true,
+    classifier: {
+      baseUrl: 'https://classifier.example.test/v1',
+      model: 'mdt-classifier',
+      timeoutMs: 2500,
+      maxTokens: 512,
+    },
+    contextTurns: 5,
+    failOpen: false,
+    hardDeny: ['custom-deny'],
+    fastAllow: ['custom-allow'],
+    audit: {
+      enabled: false,
+      storeText: true,
+      retentionDays: 90,
+    },
+    tools: {
+      allow: ['lookup', 'consult'],
+      deny: ['unsafe-tool'],
+    },
+  };
+  await writeFile(filePath, JSON.stringify(supplied));
+
+  assert.deepEqual(await loadConfig({ filePath }), {
+    enabled: true,
+    classifier: {
+      baseUrl: 'https://classifier.example.test/v1',
+      model: 'mdt-classifier',
+      timeoutMs: 2500,
+      maxTokens: 512,
+    },
+    contextTurns: 5,
+    failOpen: false,
+    hardDeny: ['custom-deny'],
+    fastAllow: ['custom-allow'],
+    refusalText,
+    audit: {
+      enabled: false,
+      storeText: true,
+      retentionDays: 90,
+    },
+    tools: {
+      allow: ['lookup', 'consult'],
+      deny: ['unsafe-tool'],
+    },
+  });
+});
+
+test('loadConfig accepts a disabled config without classifier connection fields', async (t) => {
+  const dir = await makeTempDir(t);
+  const filePath = join(dir, 'guard.json');
+  await writeFile(filePath, JSON.stringify({ enabled: false }));
+
+  const config = await loadConfig({ filePath });
+
+  assert.deepEqual(config, {
+    enabled: false,
+    classifier: {
+      timeoutMs: 1500,
+      maxTokens: 200,
+    },
+    contextTurns: 3,
+    failOpen: true,
+    hardDeny: [],
+    fastAllow: [],
+    refusalText,
+    audit: {
+      enabled: true,
+      storeText: false,
+      retentionDays: 30,
+    },
+    tools: {
+      allow: [],
+      deny: [],
+    },
+  });
+  assert.equal('baseUrl' in config.classifier, false);
+  assert.equal('model' in config.classifier, false);
+});
+
+test('loadConfig still validates supplied fields while disabled', async (t) => {
+  const dir = await makeTempDir(t);
+
+  const badUrl = uniqueSentinel('invalid-url');
+  const invalidUrlPath = join(dir, 'invalid-url.json');
+  await writeFile(
+    invalidUrlPath,
+    JSON.stringify({ enabled: false, classifier: { baseUrl: badUrl } }),
+  );
+  const urlError = await assertLoadError(
+    loadConfig({ filePath: invalidUrlPath }),
+    'CONFIG_FIELD_INVALID',
+    badUrl,
+  );
+  assert.ok(urlError.message.includes('classifier.baseUrl'), 'error must identify classifier.baseUrl');
+
+  const wrongType = uniqueSentinel('wrong-type');
+  const wrongTypePath = join(dir, 'wrong-type.json');
+  await writeFile(wrongTypePath, JSON.stringify({ enabled: false, contextTurns: wrongType }));
+  const typeError = await assertLoadError(
+    loadConfig({ filePath: wrongTypePath }),
+    'CONFIG_FIELD_INVALID',
+    wrongType,
+  );
+  assert.ok(typeError.message.includes('contextTurns'), 'error must identify contextTurns');
+});
+
+test('malformed JSON raises a sanitized CONFIG_JSON_INVALID error and never logs', async (t) => {
+  const dir = await makeTempDir(t);
+  const filePath = join(dir, 'malformed.json');
+  const sentinel = uniqueSentinel('malformed');
+  await writeFile(filePath, `{"enabled": false, "classifier": {"apiKey": "${sentinel}"},}`);
+
+  const calls = await captureConsole(() =>
+    assertLoadError(loadConfig({ filePath }), 'CONFIG_JSON_INVALID', sentinel),
+  );
+
+  assert.deepEqual(calls, [], 'the loader must not write to the console');
+});
+
+test('unreadable paths raise CONFIG_READ_FAILED without raw system details', async (t) => {
+  const dir = await makeTempDir(t);
+  const directoryPath = join(dir, 'not-a-file');
+  await mkdir(directoryPath);
+
+  const error = await assertLoadError(loadConfig({ filePath: directoryPath }), 'CONFIG_READ_FAILED');
+
+  assert.ok(!error.message.includes('EISDIR'), 'message must not expose the raw system error');
+  assert.ok(!error.message.includes('code:'), 'message must not include a raw code fragment');
+});
+
+test('invalid field values never expose sentinel secrets', async (t) => {
+  const dir = await makeTempDir(t);
+  const filePath = join(dir, 'invalid-timeout.json');
+  const sentinel = uniqueSentinel('field');
+  await writeFile(
+    filePath,
+    JSON.stringify({ enabled: false, classifier: { apiKey: sentinel, timeoutMs: 5 } }),
+  );
+
+  const error = await assertLoadError(
+    loadConfig({ filePath }),
+    'CONFIG_FIELD_INVALID',
+    sentinel,
+  );
+  assert.ok(
+    error.message.includes('classifier.timeoutMs'),
+    'error must identify classifier.timeoutMs',
+  );
 });
