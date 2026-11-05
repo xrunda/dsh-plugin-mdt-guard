@@ -241,7 +241,9 @@ export function evaluateRules(ruleSet, text) -> {
   (`\u200B`, `\xAD`, `\uFF21`, `\p{Cf}`, `\t`, `\uFE0F`) are rejected with a
   sanitized `CONFIG_RULE_UNSTABLE`, and the source never appears in `message`
   or `String(error)`. Escaped-space cases `\x20foo`, `foo\x20`, `^\x20foo$`,
-  `foo\x20$`, ` foo`, `\u{20}foo` and `\ foo` are also rejected. Stable cases
+  `foo\x20$`, `\u{20}foo` and `\ foo` are also rejected; the literal leading
+  space ` foo` is already covered by the inert-literal-whitespace cases.
+  Stable cases
   prove an escaped backslash (`\\u200B`), a single internal literal space
   (`^foo bar$`), `[^ ]`, and internal escaped spaces (`a\x20b`, `a\ b`, both
   matching `a b`) are accepted.
