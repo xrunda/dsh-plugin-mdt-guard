@@ -11,12 +11,16 @@ production classifier client and from hospital connectivity.
 
 - Exercise an OpenAI-compatible `POST /v1/chat/completions` request and a
   strict classifier JSON response against a local mock service.
-- Verify temperature/output-token request constraints, a 1500 ms timeout,
-  and that timeout does not retry.
+- Verify temperature/output-token request constraints, a 1500 ms end-to-end
+  request timeout measured from dispatch until the complete response is
+  received or the request aborts, and that timeout does not retry.
 - Verify default TLS certificate validation rejects an untrusted certificate,
-  while explicitly configured custom CA trust succeeds.
+  a hostname mismatch is rejected, and explicitly configured custom CA trust
+  succeeds for the certificate's matching hostname.
 - Verify an HTTPS request can be sent through a configured local HTTP CONNECT
-  proxy without disabling certificate validation.
+  proxy, that the proxy receives the expected CONNECT authority, and that
+  origin-certificate and hostname validation remain enabled through the
+  tunnel.
 - Document that hospital model URL, model name, authentication, CA and proxy
   settings remain environment-specific and unverified.
 
@@ -46,8 +50,8 @@ conditions; they are not a production API contract for issue #8.
 - A local mock service returning controlled success, malformed, delayed, and
   TLS responses and counting received requests.
 - Tests covering request method/path/body, valid classifier response shape,
-  no retry after timeout, TLS trust rejection/acceptance, and HTTPS through a
-  local CONNECT proxy.
+  no retry after timeout, TLS trust and hostname rejection/acceptance, and
+  HTTPS through a local CONNECT proxy with asserted CONNECT authority.
 - An issue #2 report at `Docs/M0-classifier-protocol-validation.md` with
   runtime versions, exact command/results, configuration requirements for the
   hospital, and explicit limits of the test-only reference client.
@@ -56,10 +60,17 @@ conditions; they are not a production API contract for issue #8.
 
 - Run the full harness command and confirm all tests pass, including the
   self-signed certificate and proxy cases.
-- Ensure timeout bounds are asserted with tolerance and the mock observes
-  exactly one request.
-- Ensure invalid/untrusted TLS fails rather than falling back to insecure
-  mode.
+- Start the end-to-end timer immediately before dispatch and stop only after
+  the response is fully received or the request aborts. Use a response delayed
+  beyond 1500 ms, assert the request aborts within a documented CI-safe
+  tolerance, and confirm the mock observes exactly one request after the
+  delayed handler has completed.
+- Ensure untrusted CA and hostname mismatch both fail rather than falling back
+  to insecure TLS; verify the matching hostname succeeds only with the
+  explicitly configured test CA.
+- Ensure the proxy observes the exact `CONNECT localhost:<port>` request and
+  the tunneled TLS handshake still rejects untrusted or hostname-mismatched
+  certificates.
 - Confirm each test closes servers/sockets and deletes its unique temporary
   certificate directory, even on failure.
 - Search the diff for embedded credentials, production endpoints, and
@@ -72,6 +83,9 @@ conditions; they are not a production API contract for issue #8.
   against the same mock when it is implemented.
 - `openssl` availability is needed for ephemeral test certificates. Fail with
   an actionable error if it is missing; do not silently skip TLS checks.
+- Certificate fixtures must distinguish the trusted test CA from a leaf
+  certificate containing a `localhost` Subject Alternative Name; the
+  hostname-mismatch case must use a different host name.
 - Hospital-specific model, CA, proxy, and authentication values are unknown.
   Keep them as a checklist for the hospital and do not invent defaults beyond
   PRD FR-3.
