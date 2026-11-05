@@ -513,21 +513,29 @@ test('loadConfig still validates supplied fields while disabled', async (t) => {
     invalidUrlPath,
     JSON.stringify({ enabled: false, classifier: { baseUrl: badUrl } }),
   );
-  const urlError = await assertLoadError(
-    loadConfig({ filePath: invalidUrlPath }),
-    'CONFIG_FIELD_INVALID',
-    badUrl,
-  );
+  let urlError;
+  const urlCalls = await captureConsole(async () => {
+    urlError = await assertLoadError(
+      loadConfig({ filePath: invalidUrlPath }),
+      'CONFIG_FIELD_INVALID',
+      badUrl,
+    );
+  });
+  assert.deepEqual(urlCalls, [], 'the loader must not write to the console');
   assert.ok(urlError.message.includes('classifier.baseUrl'), 'error must identify classifier.baseUrl');
 
   const wrongType = uniqueSentinel('wrong-type');
   const wrongTypePath = join(dir, 'wrong-type.json');
   await writeFile(wrongTypePath, JSON.stringify({ enabled: false, contextTurns: wrongType }));
-  const typeError = await assertLoadError(
-    loadConfig({ filePath: wrongTypePath }),
-    'CONFIG_FIELD_INVALID',
-    wrongType,
-  );
+  let typeError;
+  const typeCalls = await captureConsole(async () => {
+    typeError = await assertLoadError(
+      loadConfig({ filePath: wrongTypePath }),
+      'CONFIG_FIELD_INVALID',
+      wrongType,
+    );
+  });
+  assert.deepEqual(typeCalls, [], 'the loader must not write to the console');
   assert.ok(typeError.message.includes('contextTurns'), 'error must identify contextTurns');
 });
 
@@ -537,11 +545,14 @@ test('malformed JSON raises a sanitized CONFIG_JSON_INVALID error and never logs
   const sentinel = uniqueSentinel('malformed');
   await writeFile(filePath, `{"enabled": false, "classifier": {"apiKey": "${sentinel}"},}`);
 
-  const calls = await captureConsole(() =>
-    assertLoadError(loadConfig({ filePath }), 'CONFIG_JSON_INVALID', sentinel),
-  );
+  let error;
+  const calls = await captureConsole(async () => {
+    error = await assertLoadError(loadConfig({ filePath }), 'CONFIG_JSON_INVALID', sentinel);
+  });
 
   assert.deepEqual(calls, [], 'the loader must not write to the console');
+  assert.ok(!error.message.includes('at position'), 'message must not include parser position detail');
+  assert.ok(!error.message.includes('SyntaxError'), 'message must not include the parser error name');
 });
 
 test('unreadable paths raise CONFIG_READ_FAILED without raw system details', async (t) => {
