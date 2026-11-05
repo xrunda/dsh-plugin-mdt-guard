@@ -182,18 +182,18 @@
 
 - [ ] **Step 1: Confirm the runtime and choose a fresh profile name**
 
-  Run `dsh --version`, `dsh --help`, and `dsh plugin --help`; record the version and confirm the exact options/subcommands needed below are advertised by this installation. Use a unique profile name such as `mdt-guard-issue3-smoke-0bdcce4`. Check only that exact profile path under the documented DSH profiles directory before creation; if the path exists or the directory is uncertain, choose another unique name or stop. Never use or overwrite a profile the user already uses.
+  Run `dsh --version`, `dsh --help`, and `dsh plugin --help`; record the version and confirm the exact options/subcommands needed below are advertised by this installation. Create a fresh temporary DSH home (for example, with `mktemp -d /tmp/mdt-guard-issue3.XXXXXXXX`) and set `DSH_HOME` to that exact path for every test invocation. DSH documents profiles under `$DSH_HOME/profiles`; this isolates the test from all existing user profiles. Use a dedicated profile name such as `smoke` and confirm only that path does not exist before initializing it.
 
 - [ ] **Step 2: Initialize a disposable profile from the shipped web template**
 
-  Use the supported DSH CLI form `dsh <profile-name> --from-default-profile web --dump-config` to create the isolated profile and exit after composing its configuration. Do not manually edit files under the DSH home/profile directory.
+  Use the supported DSH CLI form `dsh --profile smoke --from-default-profile web --dump-config` with the temporary `DSH_HOME` to create the isolated profile and exit after composing its configuration. Do not manually edit files under the DSH home/profile directory.
 
 - [ ] **Step 3: Install the local bundle using DSH's plugin command**
 
   Run:
 
   ```bash
-  dsh plugin --profile <profile-name> add <absolute-path-to-repository>
+  dsh plugin --profile smoke add <absolute-path-to-repository>
   ```
 
   This uses the installed DSH CLI to manage the profile's package dependency. Do not run pnpm directly in the profile directory.
@@ -203,14 +203,14 @@
   Apply the workspace patch as an official CLI overlay and inspect the composed configuration:
 
   ```bash
-  dsh <profile-name> --patch <absolute-path-to-repository>/cordis.patch.yml --dump-config
+  dsh --profile smoke --patch <absolute-path-to-repository>/cordis.patch.yml --dump-config
   ```
 
   Confirm the composed Host row resolves to id `dsh-mdt-guard` and package `@local/dsh-mdt-guard`. If this command reports that the patch cannot resolve the package, stop and record the exact error; do not hand-edit profile files or invent a second installation mechanism.
 
 - [ ] **Step 5: Boot the isolated profile with the patch and record activation evidence**
 
-  Start the profile through `dsh <profile-name> --patch <absolute-path-to-repository>/cordis.patch.yml`. Verify a positive, live activation state through a DSH-supported plugin inventory/inspection surface (for example, Plugin Manager or runtime inspection); a composed patch row or absence of startup errors alone is not proof that the entry loaded. If this local installation exposes no supported activation-status surface, record activation as unverified and do not claim the issue's live-load acceptance passed. Stop only the specific test process after recording its result. Do not access or modify any existing profile.
+  Start the profile through `dsh --profile smoke --patch <absolute-path-to-repository>/cordis.patch.yml` with the temporary `DSH_HOME`. Verify a positive, live activation state through a DSH-supported plugin inventory/inspection surface (for example, Plugin Manager or runtime inspection); a composed patch row or absence of startup errors alone is not proof that the entry loaded. If this local installation exposes no supported activation-status surface, record activation as unverified and do not claim the issue's live-load acceptance passed. Stop only the specific test process after recording its result. Do not access or modify any existing profile.
 
 - [ ] **Step 6: Verify the no-plugin baseline**
 
@@ -218,7 +218,7 @@
 
 - [ ] **Step 7: Record verification scope**
 
-  Record DSH version, profile name, commands, whether package installation/composition/boot succeeded, and any observable activation limitation. Clearly state that this is a local rc.5 smoke test, not a hospital profile/deployment verification.
+  Record DSH version, temporary profile name, commands, whether package installation/composition/boot succeeded, and any observable activation limitation. Clearly state that this is a local rc.5 smoke test, not a hospital profile/deployment verification. After evidence is recorded, clean up only the exact temporary DSH home created for this test; never remove a user profile directory.
 
 ## Task 5: Add the validation report and run final checks
 
