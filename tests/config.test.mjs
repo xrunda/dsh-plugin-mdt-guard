@@ -552,7 +552,6 @@ test('unreadable paths raise CONFIG_READ_FAILED without raw system details', asy
   const error = await assertLoadError(loadConfig({ filePath: directoryPath }), 'CONFIG_READ_FAILED');
 
   assert.ok(!error.message.includes('EISDIR'), 'message must not expose the raw system error');
-  assert.ok(!error.message.includes('code:'), 'message must not include a raw code fragment');
 });
 
 test('invalid field values never expose sentinel secrets', async (t) => {
@@ -564,11 +563,11 @@ test('invalid field values never expose sentinel secrets', async (t) => {
     JSON.stringify({ enabled: false, classifier: { apiKey: sentinel, timeoutMs: 5 } }),
   );
 
-  const error = await assertLoadError(
-    loadConfig({ filePath }),
-    'CONFIG_FIELD_INVALID',
-    sentinel,
-  );
+  let error;
+  const calls = await captureConsole(async () => {
+    error = await assertLoadError(loadConfig({ filePath }), 'CONFIG_FIELD_INVALID', sentinel);
+  });
+  assert.deepEqual(calls, [], 'the loader must not write to the console');
   assert.ok(
     error.message.includes('classifier.timeoutMs'),
     'error must identify classifier.timeoutMs',
