@@ -61,11 +61,12 @@ behavior, while disabling the row leaves DSH behavior untouched.
 Add a declaration-only `types/contracts.d.ts` contract file for the next
 modules, using PRD terms:
 
-- `GateInput` contains the current user message, a readonly list of recent
-  `{ role, content }` messages, a session identifier, and session state
-  `in_scope | out_of_scope | unknown`.
-- `GateDecision` contains `decision: allow | deny | unknown`, category A-I,
-  a reason string, and confidence in the closed interval [0, 1].
+- `GateInput` contains `sessionId: string`, `currentMessage: string`, a
+  readonly list of `{ role: user | assistant, content: string }` recent
+  messages, and session state `in_scope | out_of_scope | unknown`.
+- `GateDecision` contains `decision: allow | deny | unknown`, category
+  `A | B | C | D | E | F | G | H | I`, a reason string, and numeric
+  confidence in the closed interval [0, 1].
 - `ConfigProvider<TConfig>` exposes `load(): Promise<TConfig>`.
 - `AuditWriter<TEvent>` exposes `write(event: TEvent): Promise<void>`.
 
