@@ -1,10 +1,16 @@
 /**
- * Pure configuration normalization and validation for the MDT guard bundle.
+ * Configuration loading, normalization, and validation for the MDT guard
+ * bundle.
  *
- * This module deliberately contains no file I/O. It validates a supplied
- * configuration object, applies the PRD defaults, and returns a fresh
- * normalized object graph. Loading a JSON file is a separate concern.
+ * `validateConfig` is pure: it applies the PRD defaults to a supplied object
+ * and returns a fresh normalized object graph. `loadConfig` is the only
+ * file-I/O entry point; it reads the server-side JSON file and delegates all
+ * normalization to `validateConfig`.
  */
+
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 const REFUSAL_TEXT =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
@@ -60,6 +66,8 @@ const INTEGER_BOUNDS = {
 const CONFIG_FIELD_REQUIRED = 'CONFIG_FIELD_REQUIRED';
 const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
 const CONFIG_UNKNOWN_FIELD = 'CONFIG_UNKNOWN_FIELD';
+const CONFIG_JSON_INVALID = 'CONFIG_JSON_INVALID';
+const CONFIG_READ_FAILED = 'CONFIG_READ_FAILED';
 
 /**
  * Sanitized configuration error. Messages are built only from fixed templates
@@ -306,4 +314,42 @@ export function validateConfig(input) {
     audit,
     tools,
   };
+}
+
+/**
+ * Load and validate the server-side MDT guard configuration file.
+ *
+ * The default path is resolved at call time so tests can isolate `HOME`. A
+ * missing file starts from PRD defaults and therefore still raises the
+ * enabled-default required-field error; the caller must leave the guard
+ * inactive. Malformed JSON and filesystem failures become sanitized
+ * `ConfigError`s that never retain raw parser detail, filesystem text, or
+ * supplied configuration contents. This function never logs and never creates
+ * directories or files.
+ *
+ * @param {{ filePath?: string }} [options]
+ * @returns {Promise<object>} a fresh normalized configuration
+ * @throws {ConfigError}
+ */
+export async function loadConfig({ filePath } = {}) {
+  const resolvedPath = filePath ?? join(homedir(), '.dsh', 'mdt', 'guard.json');
+
+  let text;
+  try {
+    text = await readFile(resolvedPath, 'utf8');
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && error.code === 'ENOENT') {
+      return validateConfig({});
+    }
+    throw new ConfigError(CONFIG_READ_FAILED, 'config', 'Unable to read configuration file');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new ConfigError(CONFIG_JSON_INVALID, 'config', 'Configuration file is not valid JSON');
+  }
+
+  return validateConfig(parsed);
 }
