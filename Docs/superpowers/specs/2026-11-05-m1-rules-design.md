@@ -51,8 +51,10 @@ as follows:
 |---|---|
 | omitted | built-in sources |
 | `[]` | built-in sources |
-| non-empty string array | the supplied sources |
-| non-array / non-string item / invalid regex | `ConfigError` |
+| non-empty string array | the supplied sources, returned verbatim (no trimming or rewriting) |
+| non-array, sparse array, or non-string item | `CONFIG_FIELD_INVALID` at the array field (`hardDeny` / `fastAllow`) |
+| array containing an empty or whitespace-only source | `CONFIG_FIELD_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
+| array containing a source with invalid regex syntax | `CONFIG_RULE_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
 
 The built-in catalogs are defined once in `rule-defaults.js` and shared by
 the validator and the rule compiler, so defaults and metadata cannot drift.
@@ -120,8 +122,13 @@ export function evaluateRules(ruleSet, text) -> {
 
 - Empty or whitespace-only sources are rejected before compilation as
   `CONFIG_FIELD_INVALID` with the indexed field (`hardDeny[<index>]` or
-  `fastAllow[<index>]`). An empty pattern would match every message, so it is
-  treated as a fail-open configuration error rather than an invalid regex.
+  `fastAllow[<index>]`). An empty source matches every message, while a
+  whitespace-only source is meaningless and matches most normalized
+  multi-word messages; both are fail-open configuration errors, so they are
+  reported as field problems rather than invalid regexes. Sources made only
+  of zero-width characters are not rejected: evaluation strips zero-width
+  characters from normalized text, so such a source can never match and is
+  inert rather than fail-open.
 - Only non-empty sources are compiled. A source with invalid syntax raises
   `CONFIG_RULE_INVALID` with the indexed field.
 - Message templates identify the field only. No pattern, input text, parser

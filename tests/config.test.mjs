@@ -27,6 +27,7 @@ function assertConfigError(input, code, field, options = {}) {
     (error) => {
       assert.equal(error.name, 'ConfigError', `${label}: expected ConfigError`);
       assert.equal(error.code, code, `${label}: unexpected error code`);
+      assert.equal(error.field, field, `${label}: unexpected error field`);
       assert.ok(error.message.includes(field), `${label}: error message must identify ${field}`);
       assert.equal(error.cause, undefined, `${label}: ConfigError must not attach a cause`);
       for (const forbidden of options.forbidden ?? []) {
@@ -291,6 +292,9 @@ test('built-in rule catalogs are complete, ordered, and compile with RULE_REGEX_
     ['hard-deny.config-modify', 'G'],
     ['hard-deny.service-ops', 'G'],
   ];
+  // The five `fast-allow.software-help` rows intentionally share one ID: each
+  // row covers a different phrasing family while keeping a single audit
+  // identity.
   const expectedFastAllow = [
     ['fast-allow.greeting', 'D'],
     ['fast-allow.continuation', 'D'],
@@ -305,13 +309,15 @@ test('built-in rule catalogs are complete, ordered, and compile with RULE_REGEX_
     ['HARD_DENY_RULES', HARD_DENY_RULES, expectedHardDeny],
     ['FAST_ALLOW_RULES', FAST_ALLOW_RULES, expectedFastAllow],
   ]) {
-    assert.ok(rules.length > 0, `${label} must not be empty`);
+    assert.ok(Object.isFrozen(rules), `${label} must be frozen`);
+    // The exact deepEqual below already proves the array is non-empty.
     assert.deepEqual(
       rules.map((rule) => [rule.id, rule.category]),
       expected,
       `${label} ids and categories must match the documented order`,
     );
     for (const rule of rules) {
+      assert.ok(Object.isFrozen(rule), `${rule.id}: rule object must be frozen`);
       assert.equal(typeof rule.source, 'string', `${rule.id}: source must be a string`);
       assert.doesNotThrow(
         () => RegExp(rule.source, RULE_REGEX_FLAGS),
@@ -319,20 +325,45 @@ test('built-in rule catalogs are complete, ordered, and compile with RULE_REGEX_
       );
     }
   }
+
+  assert.ok(
+    Object.isFrozen(HARD_DENY_DEFAULT_SOURCES),
+    'HARD_DENY_DEFAULT_SOURCES must be frozen',
+  );
+  assert.ok(
+    Object.isFrozen(FAST_ALLOW_DEFAULT_SOURCES),
+    'FAST_ALLOW_DEFAULT_SOURCES must be frozen',
+  );
 });
 
 test('empty and whitespace-only rule sources are rejected before compilation', () => {
-  for (const [field, input, forbidden] of [
-    ['hardDeny[0]', { hardDeny: [''] }, ''],
-    ['fastAllow[0]', { fastAllow: ['   '] }, '   '],
-  ]) {
-    assertConfigError(
-      { enabled: false, ...input },
-      'CONFIG_FIELD_INVALID',
-      field,
-      { label: field, forbidden: forbidden === '' ? [] : [forbidden] },
-    );
+  // Both rule fields reject every empty/whitespace-only source. An empty
+  // string is never used in `forbidden`: String#includes('') is always true.
+  for (const fieldName of ['hardDeny', 'fastAllow']) {
+    for (const source of ['', '   ', '　', '\t\n']) {
+      const field = `${fieldName}[0]`;
+      assertConfigError(
+        { enabled: false, [fieldName]: [source] },
+        'CONFIG_FIELD_INVALID',
+        field,
+        {
+          label: `${field}: ${JSON.stringify(source)}`,
+          forbidden: source === '' ? [] : [source],
+        },
+      );
+    }
   }
+});
+
+test('meaningful surrounding whitespace in rule sources is preserved', () => {
+  const result = validateConfig({
+    enabled: false,
+    hardDeny: ['^ foo$'],
+    fastAllow: [' foo '],
+  });
+
+  assert.deepEqual(result.hardDeny, ['^ foo$']);
+  assert.deepEqual(result.fastAllow, [' foo ']);
 });
 
 test('sparse rule arrays are rejected as CONFIG_FIELD_INVALID', () => {

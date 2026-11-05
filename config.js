@@ -140,10 +140,14 @@ function requireStringArray(value, field) {
 /**
  * Validate a regular-expression source array. Shape errors keep the existing
  * `CONFIG_FIELD_INVALID` contract. Empty or whitespace-only sources are
- * rejected as `CONFIG_FIELD_INVALID` before compilation because a regex built
- * from them matches every message, which would fail open. A non-empty source
- * that does not compile raises `CONFIG_RULE_INVALID` for the indexed field
- * only; no source text is ever attached to the message.
+ * rejected as `CONFIG_FIELD_INVALID` before compilation: an empty source
+ * matches every message, and a whitespace-only source is meaningless and
+ * matches most normalized multi-word messages, so both would fail open.
+ * Sources made only of zero-width characters are not rejected, but evaluation
+ * strips zero-width characters from normalized text, so they can never match
+ * and are inert rather than fail-open. A non-empty source that does not
+ * compile raises `CONFIG_RULE_INVALID` for the indexed field only; no source
+ * text is ever attached to the message.
  */
 function requireRegexArray(value, field) {
   requireStringArray(value, field);
