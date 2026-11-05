@@ -186,7 +186,7 @@ function requireRegexArray(value, field) {
     if (isWhitespaceOnlySource(source)) {
       fail(CONFIG_FIELD_INVALID, indexedField);
     }
-    if (!isBuiltInRuleSource(source) && !isNormalizationStableSource(source)) {
+    if (!isBuiltInRuleSource(source, field) && !isNormalizationStableSource(source)) {
       fail(CONFIG_RULE_UNSTABLE, indexedField);
     }
     try {

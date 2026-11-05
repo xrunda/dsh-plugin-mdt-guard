@@ -108,7 +108,7 @@ function compileField(value, field, builtInRules, builtInSourceMetadata) {
     // A custom source containing characters evaluation normalization erases or
     // folds could never match; reject it rather than compile a silently inert
     // rule. Exact built-in sources keep their catalog identity and are exempt.
-    if (!isBuiltInRuleSource(source) && !isNormalizationStableSource(source)) {
+    if (!isBuiltInRuleSource(source, field) && !isNormalizationStableSource(source)) {
       fail(CONFIG_RULE_UNSTABLE, indexedField);
     }
 

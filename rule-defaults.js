@@ -118,22 +118,30 @@ export const FAST_ALLOW_DEFAULT_SOURCES = Object.freeze(
   FAST_ALLOW_RULES.map((rule) => rule.source),
 );
 
-const BUILT_IN_SOURCE_SET = new Set([
-  ...HARD_DENY_DEFAULT_SOURCES,
-  ...FAST_ALLOW_DEFAULT_SOURCES,
-]);
+const HARD_DENY_SOURCE_SET = new Set(HARD_DENY_DEFAULT_SOURCES);
+const FAST_ALLOW_SOURCE_SET = new Set(FAST_ALLOW_DEFAULT_SOURCES);
 
 /**
- * Whether a source is an exact built-in source from either catalog.
+ * Whether a source is an exact built-in source from the given field's own
+ * catalog.
  *
- * Exact built-in sources are exempt from the normalization-stability guard
- * because some legitimately contain full-width punctuation that NFKC folds.
+ * Identity and the normalization-stability exemption are same-field only: an
+ * exact built-in source supplied in the other field is treated as a custom
+ * source, so it keeps no catalog identity and is subject to the stability
+ * guard.
  *
  * @param {string} source
+ * @param {'hardDeny'|'fastAllow'} field
  * @returns {boolean}
  */
-export function isBuiltInRuleSource(source) {
-  return BUILT_IN_SOURCE_SET.has(source);
+export function isBuiltInRuleSource(source, field) {
+  if (field === 'hardDeny') {
+    return HARD_DENY_SOURCE_SET.has(source);
+  }
+  if (field === 'fastAllow') {
+    return FAST_ALLOW_SOURCE_SET.has(source);
+  }
+  return false;
 }
 
 // Evaluation erases every Unicode `Cf` format character and the variation
