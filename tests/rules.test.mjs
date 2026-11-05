@@ -136,6 +136,13 @@ test('every built-in hard-deny rule denies representative messages', () => {
     ['hard-deny.service-ops', 'G', '重启系统并检查'],
     ['hard-deny.service-ops', 'G', '重启系统，检查'],
     ['hard-deny.service-ops', 'G', '重启系统后检查'],
+    // Optional whitespace is allowed before punctuation, a conjunction or an
+    // ops qualifier, but not before a clinical compound.
+    ['hard-deny.service-ops', 'G', '重启系统 服务'],
+    ['hard-deny.service-ops', 'G', '重启系统 配置'],
+    ['hard-deny.service-ops', 'G', '重启系统 并检查'],
+    ['hard-deny.service-ops', 'G', '重启系统 后检查'],
+    ['hard-deny.service-ops', 'G', '关闭系统 。'],
   ];
 
   const ruleSet = compileRules({});
@@ -289,6 +296,13 @@ test('benign MDT and medical phrasing falls through to unknown', () => {
     '停止系统治疗',
     '启动系统治疗',
     '关闭系统性治疗',
+    // A space after 系统 does not turn a clinical compound into an ops object.
+    '停止系统 治疗',
+    '停止系统 免疫治疗',
+    '停止系统 化治疗',
+    '停止系统 疾病治疗',
+    '停止系统 功能支持',
+    '停止系统 感染治疗',
   ];
 
   const ruleSet = compileRules({});
