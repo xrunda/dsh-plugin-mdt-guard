@@ -128,6 +128,14 @@ test('every built-in hard-deny rule denies representative messages', () => {
     ['hard-deny.service-ops', 'G', '诊断系统故障'],
     ['hard-deny.service-ops', 'G', '修复系统配置'],
     ['hard-deny.service-ops', 'G', '停止系统服务'],
+    // A bare 系统 is an ops object only as a complete object, before a
+    // conjunction, or before an ops qualifier.
+    ['hard-deny.service-ops', 'G', '关闭系统。'],
+    ['hard-deny.service-ops', 'G', '重启系统服务'],
+    ['hard-deny.service-ops', 'G', '重启系统配置'],
+    ['hard-deny.service-ops', 'G', '重启系统并检查'],
+    ['hard-deny.service-ops', 'G', '重启系统，检查'],
+    ['hard-deny.service-ops', 'G', '重启系统后检查'],
   ];
 
   const ruleSet = compileRules({});
@@ -271,6 +279,16 @@ test('benign MDT and medical phrasing falls through to unknown', () => {
     '修复消化系统功能',
     '修复免疫系统功能',
     '停止系统性红斑狼疮的治疗',
+    // A bare 系统 followed by a clinical compound is not an ops object.
+    '停止系统化治疗',
+    '启动系统化治疗',
+    '停止系统免疫治疗',
+    '停止系统疾病治疗',
+    '停止系统功能支持',
+    '停止系统感染治疗',
+    '停止系统治疗',
+    '启动系统治疗',
+    '关闭系统性治疗',
   ];
 
   const ruleSet = compileRules({});
