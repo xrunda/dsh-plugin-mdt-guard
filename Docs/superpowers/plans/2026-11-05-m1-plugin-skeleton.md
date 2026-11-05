@@ -200,21 +200,21 @@
 
 - [ ] **Step 4: Verify DSH composes the registration patch**
 
-  Apply the workspace patch as an official CLI overlay and inspect the composed configuration:
+  Inspect the profile configuration after installation:
 
   ```bash
-  dsh --profile smoke --patch <absolute-path-to-repository>/cordis.patch.yml --dump-config
+  dsh --profile smoke --dump-config
   ```
 
-  Confirm the composed Host row resolves to id `dsh-mdt-guard` and package `@local/dsh-mdt-guard`. If this command reports that the patch cannot resolve the package, stop and record the exact error; do not hand-edit profile files or invent a second installation mechanism.
+  `dsh plugin add` selects the installed bundle, so DSH loads the patch declared by its package manifest. Confirm exactly one Host row resolves to id `dsh-mdt-guard` and package `@local/dsh-mdt-guard`. Do not pass the same workspace patch as a CLI overlay: that duplicates the row.
 
 - [ ] **Step 5: Boot the isolated profile with the patch and record activation evidence**
 
-  Start the profile through `dsh --profile smoke --patch <absolute-path-to-repository>/cordis.patch.yml` with the temporary `DSH_HOME`. Verify a positive, live activation state through a DSH-supported plugin inventory/inspection surface (for example, Plugin Manager or runtime inspection); a composed patch row or absence of startup errors alone is not proof that the entry loaded. If this local installation exposes no supported activation-status surface, record activation as unverified and do not claim the issue's live-load acceptance passed. Stop only the specific test process after recording its result. Do not access or modify any existing profile.
+  Start the profile through `dsh --profile smoke --no-open --host 127.0.0.1 --port 0` with the temporary `DSH_HOME`; no patch overlay is needed. Verify a positive, live activation state through a DSH-supported plugin inventory/inspection surface (for example, Plugin Manager or runtime inspection); a composed patch row or absence of startup errors alone is not proof that the entry loaded. If no positive activation status can be obtained in this run, record activation as unverified and do not claim the issue's live-load acceptance passed. Stop only the specific test process after recording its result. Do not access or modify any existing profile.
 
 - [ ] **Step 6: Verify the no-plugin baseline**
 
-  Start the same disposable profile without a patch overlay. Confirm the default DSH startup remains available and record that the bundle row is absent in this baseline. Do not claim that absence of the row is a hospital deployment test.
+  Remove the bundle through `dsh plugin --profile smoke remove @local/dsh-mdt-guard`, then run `dsh --profile smoke --dump-config` and confirm the row is absent. Start the same disposable profile without a patch overlay and confirm the web server responds. Do not claim that absence of the row is a hospital deployment test.
 
 - [ ] **Step 7: Record verification scope**
 

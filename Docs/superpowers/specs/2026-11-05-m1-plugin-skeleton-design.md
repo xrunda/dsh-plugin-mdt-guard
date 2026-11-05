@@ -85,12 +85,13 @@ test them with injected mocks.
 - Run `node --test tests/model-gateway/*.test.mjs
   tests/plugin-skeleton.test.mjs` and `git diff --check`.
 - Use only a newly created isolated profile based on the local DSH `web`
-  template for the live smoke test. Install/activate the local bundle only
-  through an official DSH-supported workflow, verify the plugin is loaded,
-  and verify it is disabled afterward. Do not edit or overwrite the user's
-  existing profile. If the installed CLI does not expose a supported bundle
-  activation path, stop at the documented limitation rather than editing
-  profile state by hand.
+  template for the live smoke test. Install/select the local bundle only
+  through an official DSH-supported workflow, and verify live activation
+  through a supported inspection surface before claiming it loaded. Do not
+  edit or overwrite the user's existing profile. If no positive activation
+  status can be obtained, record activation as unverified rather than
+  treating package installation, a composed row, or a successful server
+  start as proof.
 - Record the DSH version, commands, observed activation result, and any
   limitation in a short issue report. A local profile smoke test is not
   hospital deployment evidence.
