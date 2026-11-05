@@ -537,6 +537,7 @@ test('compileRules rejects normalization-unstable custom sources with a sanitize
     // anchor-adjacent positions are detected, not arbitrary nesting such as
     // `(?:^\x20)`.
     String.raw`\x20foo`,
+    String.raw`\u0020foo`,
     String.raw`foo\x20`,
     String.raw`^\x20foo$`,
     String.raw`foo\x20$`,

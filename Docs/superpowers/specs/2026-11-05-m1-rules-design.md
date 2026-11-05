@@ -182,7 +182,7 @@ export function evaluateRules(ruleSet, text) -> {
   meaningful. An escaped `U+0020` (`\x20`, `\u{20}`, `\ `) is rejected when it
   sits at the very start or end of the source, directly after a leading `^`,
   or directly before a trailing `$`, because input is trimmed before matching
-  (`\x20foo`, `foo\x20`, `^\x20foo$`, `foo\x20$`, `\ foo`); an internal
+  (`\x20foo`, `\u0020foo`, `foo\x20`, `^\x20foo$`, `foo\x20$`, `\ foo`); an internal
   escaped space such as `a\x20b` or `a\ b` still compiles and matches `a b`.
   The check is conservative: it does not prove that a source can match,
   arbitrary regex semantics are not fully analysed, and only direct
@@ -240,7 +240,7 @@ export function evaluateRules(ruleSet, text) -> {
   `a\nb`, NEL, ` foo`, `foo `, `^ foo$`) and escape targets
   (`\u200B`, `\xAD`, `\uFF21`, `\p{Cf}`, `\t`, `\uFE0F`) are rejected with a
   sanitized `CONFIG_RULE_UNSTABLE`, and the source never appears in `message`
-  or `String(error)`. Escaped-space cases `\x20foo`, `foo\x20`, `^\x20foo$`,
+  or `String(error)`. Escaped-space cases `\x20foo`, `\u0020foo`, `foo\x20`, `^\x20foo$`,
   `foo\x20$`, `\u{20}foo` and `\ foo` are also rejected; the literal leading
   space ` foo` is already covered by the inert-literal-whitespace cases.
   Stable cases
