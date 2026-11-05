@@ -5,12 +5,14 @@
   "type": "module",
   "exports": {
     ".": "./index.js",
+    "./config": "./config.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg"
   },
   "files": [
     "cordis.patch.yml",
     "index.js",
+    "config.js",
     "types/contracts.d.ts",
     "locale/en.json",
     "locale/zh.json",
