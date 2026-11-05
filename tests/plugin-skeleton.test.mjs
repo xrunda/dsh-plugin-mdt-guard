@@ -24,9 +24,20 @@ test('package manifest defines the private ESM bundle contract', async () => {
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
     assert.deepEqual(manifest[field] ?? {}, {}, `${field} must not declare runtime dependencies`);
   }
-  for (const script of ['preinstall', 'install', 'postinstall', 'prepare']) {
-    assert.equal(manifest.scripts?.[script], undefined, `${script} scripts are not allowed`);
-  }
+  const installLifecycleScripts = [
+    'preinstall',
+    'install',
+    'postinstall',
+    'prepublish',
+    'preprepare',
+    'prepare',
+    'postprepare',
+  ];
+  assert.deepEqual(
+    Object.keys(manifest.scripts ?? {}).filter((script) => installLifecycleScripts.includes(script)),
+    [],
+    'install lifecycle scripts are not allowed',
+  );
 
   const files = manifest.files;
   assert.ok(Array.isArray(files), 'files must be a package allowlist');
