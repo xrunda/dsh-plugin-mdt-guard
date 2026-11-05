@@ -271,6 +271,8 @@ test('fast-allow rules return category C or D', () => {
     ['fast-allow.software-help', 'C', '这个软件怎么下载'],
     ['fast-allow.software-help', 'C', '这个版本怎么安装'],
     ['fast-allow.software-help', 'C', '这个插件怎么用啊'],
+    ['fast-allow.software-help', 'C', '这个菜单怎么用'],
+    ['fast-allow.software-help', 'C', '怎么注册'],
   ];
 
   const ruleSet = compileRules({});
@@ -677,6 +679,12 @@ test('non-empty custom arrays replace the built-ins and keep indexed identities'
     category: 'H',
     ruleId: 'hard-deny.prompt-injection',
   });
+
+  // Built-in identity is scoped to the field's own catalog. A stable source
+  // from the other catalog compiles as a custom indexed rule with no identity.
+  const crossField = compileRules({ fastAllow: [HARD_DENY_RULES[0].source] });
+  assert.equal(crossField.fastAllow[0].id, 'fastAllow[0]');
+  assert.equal(crossField.fastAllow[0].category, null);
 });
 
 test('omitted and empty rule arrays compile to the built-in catalog', () => {
@@ -920,6 +928,18 @@ test('compileRules and validateConfig report identical rule errors', () => {
     [{ fastAllow: ['^ok$', '[z-a]'] }, 'CONFIG_RULE_INVALID', 'fastAllow[1]'],
     [{ hardDeny: ['\u200B'] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
     [{ fastAllow: ['\u00AD'] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
+    // Built-in exemption is same-field only. An exact built-in source from the
+    // other catalog is a custom source and is unstable in this field.
+    [
+      { hardDeny: [FAST_ALLOW_RULES[0].source] },
+      'CONFIG_RULE_UNSTABLE',
+      'hardDeny[0]',
+    ],
+    [
+      { fastAllow: [HARD_DENY_RULES[6].source] },
+      'CONFIG_RULE_UNSTABLE',
+      'fastAllow[0]',
+    ],
     [{ hardDeny: ['ＩＧＮＯＲＥ'] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
     [{ fastAllow: ['ｃｏｎｆｉｇ'] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
     [{ hardDeny: ['忽\uFE0F略'] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
