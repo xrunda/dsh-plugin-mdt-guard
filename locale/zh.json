@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MDT 话题守卫",
+    "description": "供 DSH Host 使用的 MDT 话题守卫插件包。此包目前仅包含展示元数据，尚未实现拦截行为。"
+  }
+}
