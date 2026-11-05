@@ -30,8 +30,13 @@ const ERROR_TEMPLATES = {
 // A full-string whitespace predicate equivalent to /^[\s\u0085]*$/.
 // String#trim() and \s alone miss U+0085 (NEL).
 const WHITESPACE_ONLY = /^[\s\u0085]*$/;
-const ZERO_WIDTH = /[​-‍﻿]/g;
-const WHITESPACE_RUN = /\s+/g;
+// Zero-width characters stripped before matching. Kept as explicit escapes so
+// no invisible literal ever lives in this source file.
+const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
+// Collapse all whitespace, including U+0085 (NEL), to a single space. NEL is
+// matched explicitly because `\s` does not include it; this must stay in
+// parity with config.js's /^[\s\u0085]*$/ source predicate.
+const WHITESPACE_RUN = /[\s\u0085]+/g;
 
 function fail(code, field) {
   const template = ERROR_TEMPLATES[code] ?? ERROR_TEMPLATES[CONFIG_FIELD_INVALID];
@@ -128,7 +133,9 @@ function compileField(value, field, builtInRules, builtInSourceMetadata) {
  * Compile the effective rule configuration once.
  *
  * Only `hardDeny` and `fastAllow` are read; unrelated configuration fields are
- * neither validated nor touched. Every call returns fresh frozen arrays and
+ * neither validated nor touched. The input only has to be a non-null,
+ * non-array object: validating it as a plain object and checking unrelated
+ * fields is `validateConfig`'s job. Every call returns fresh frozen arrays and
  * rule objects, so callers may hold compiled sets without sharing state.
  *
  * @param {object} config
@@ -161,7 +168,8 @@ export function compileRules(config) {
  * Normalize a message for rule matching without retaining the original text.
  *
  * NFKC folds full-width forms, zero-width characters are removed, whitespace
- * runs collapse to one space, and the result is trimmed.
+ * (including U+0085 NEL) runs collapse to one space, and the result is
+ * trimmed.
  */
 function normalizeText(text) {
   return text

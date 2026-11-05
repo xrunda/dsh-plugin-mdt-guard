@@ -24,8 +24,8 @@ This issue adds a pure rule module. It does not wire the rules into
   G/H hard-deny. Disabling the whole gate remains available through
   `enabled: false`.
 - Compile every source with the `i` flag only. Rules receive text normalized
-  with NFKC, `U+200B`–`U+200D` and `U+FEFF` removed, and whitespace collapsed;
-  the original message is never modified or retained.
+  with NFKC, `U+200B`–`U+200D` and `U+FEFF` removed, and whitespace (including
+  `U+0085` NEL) collapsed; the original message is never modified or retained.
 - Evaluate all hard-deny rules before any fast-allow rule. A message matching
   both is denied.
 - A fast-allow match is a terminal "do not call the classifier" result. For
@@ -136,13 +136,17 @@ export function evaluateRules(ruleSet, text) -> {
   `CONFIG_RULE_INVALID` with the indexed field.
 - Message templates identify the field only. No pattern, input text, parser
   detail or `cause` is attached.
+- Custom sources are server-admin-controlled and evaluated synchronously
+  without a timeout. Catastrophic backtracking (ReDoS) is therefore possible;
+  bounding custom-regex execution is out of scope.
 - `compileRules` accepts a raw config object and applies the same empty ->
   built-in rule; it throws `TypeError` only for a non-object config.
 
 ## Testing
 
 - Table-driven hard-deny cases for every built-in rule, using PRD examples
-  plus case, full-width, zero-width and whitespace variants.
+  plus case, full-width, zero-width and whitespace (including U+0085 NEL)
+  variants.
 - Table-driven fast-allow cases for greetings, continuations and software
   help, including whole-message anchoring.
 - Negative cases proving benign MDT/medical phrasing falls through to
@@ -161,5 +165,6 @@ export function evaluateRules(ruleSet, text) -> {
 - `agent/pre-step` integration and fixed refusal UX (issue #6).
 - Session state transitions and continuation inheritance (issue #10).
 - Classifier client, audit persistence, tool restrictions and hot reload.
+- ReDoS protection for administrator-supplied regular expressions.
 - Claiming the rules are a complete security boundary. The PRD explicitly
   treats this as policy convergence, not a security boundary.
