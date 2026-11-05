@@ -606,7 +606,7 @@ test('invalid field values never expose sentinel secrets', async (t) => {
   );
 });
 
-test('the documented example is valid and contains no credentials', async () => {
+test('the documented example is valid, matches the documented defaults, and contains no credentials', async () => {
   const text = await readFile(new URL('../Docs/guard.example.json', import.meta.url), 'utf8');
   const example = JSON.parse(text);
   const normalized = validateConfig(example);
@@ -617,15 +617,19 @@ test('the documented example is valid and contains no credentials', async () => 
   assert.equal(Object.hasOwn(normalized.classifier, 'apiKey'), false);
 
   const defaults = validateConfig({ enabled: false });
-  assert.equal(normalized.classifier.timeoutMs, defaults.classifier.timeoutMs);
-  assert.equal(normalized.classifier.maxTokens, defaults.classifier.maxTokens);
-  assert.equal(normalized.contextTurns, defaults.contextTurns);
-  assert.equal(normalized.failOpen, defaults.failOpen);
-  assert.equal(normalized.refusalText, defaults.refusalText);
-  assert.equal(normalized.audit.enabled, defaults.audit.enabled);
-  assert.equal(normalized.audit.storeText, defaults.audit.storeText);
-  assert.equal(normalized.audit.retentionDays, defaults.audit.retentionDays);
-  assert.deepEqual(normalized.hardDeny, defaults.hardDeny);
-  assert.deepEqual(normalized.fastAllow, defaults.fastAllow);
-  assert.deepEqual(normalized.tools, defaults.tools);
+  for (const [label, actual, expected] of [
+    ['classifier.timeoutMs', normalized.classifier.timeoutMs, defaults.classifier.timeoutMs],
+    ['classifier.maxTokens', normalized.classifier.maxTokens, defaults.classifier.maxTokens],
+    ['contextTurns', normalized.contextTurns, defaults.contextTurns],
+    ['failOpen', normalized.failOpen, defaults.failOpen],
+    ['refusalText', normalized.refusalText, defaults.refusalText],
+    ['audit.enabled', normalized.audit.enabled, defaults.audit.enabled],
+    ['audit.storeText', normalized.audit.storeText, defaults.audit.storeText],
+    ['audit.retentionDays', normalized.audit.retentionDays, defaults.audit.retentionDays],
+    ['hardDeny', normalized.hardDeny, defaults.hardDeny],
+    ['fastAllow', normalized.fastAllow, defaults.fastAllow],
+    ['tools', normalized.tools, defaults.tools],
+  ]) {
+    assert.deepEqual(actual, expected, `example ${label} drifted from the config.js default`);
+  }
 });

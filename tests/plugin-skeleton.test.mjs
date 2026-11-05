@@ -59,7 +59,9 @@ test('package manifest defines the private ESM bundle contract', async () => {
   assert.equal(manifest.exports?.['./config'], './config.js');
   assert.ok(files.includes('config.js'), 'files must include config.js');
   for (const entry of files) {
-    const normalized = entry.replace(/^(?:\.\/)+/, '');
+    // Normalize leading "./" forms (including duplicate slashes) so entries
+    // like "./Docs" or ".//tests/foo" cannot slip into the package allowlist.
+    const normalized = entry.replace(/^(?:\.?\/)+/, '');
     assert.ok(
       !/^(?:Docs|tests)(?:\/|$)/.test(normalized),
       `files must not include ${entry}`,
