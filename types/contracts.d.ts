@@ -7,6 +7,7 @@ export interface GateInput {
   currentMessage: string;
   recentMessages: ReadonlyArray<{ role: 'user' | 'assistant'; content: string }>;
   sessionState: SessionState;
+  attachmentTypes?: ReadonlyArray<string>;
 }
 
 export interface GateDecision {
