@@ -68,7 +68,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.service-ops',
     category: 'G',
-    source: String.raw`(重启|启动|停止|关闭|杀掉|排查|调试|诊断|修复).{0,8}(服务|进程|插件|dsh|系统|主机|服务器|容器)|(?:restart|start|stop|kill|debug|diagnose|fix).{0,16}(?:service|process|plugin|dsh|server|container|host)`,
+    source: String.raw`(?:重启|启动|停止|关闭|杀掉).{0,8}(?:服务|进程|插件|dsh|系统(?!性)|主机|服务器|容器)|(?:排查|调试|诊断|修复).{0,8}(?:服务|进程|插件|dsh|主机|服务器|容器|操作系统|系统故障|系统异常|系统错误|系统服务|系统进程|系统配置|系统设置|系统日志|系统环境|系统文件|系统目录)|(?:restart|start|stop|kill|debug|diagnose|fix).{0,16}(?:service|process|plugin|dsh|server|container|host)`,
   }),
 ]);
 
@@ -152,6 +152,21 @@ export function stripFormatCharacters(text) {
   return text.replace(FORMAT_CHARACTERS, '');
 }
 
+/**
+ * Replace the format characters that evaluation normalization erases with a
+ * single space.
+ *
+ * Erasing a format character that separates two English tokens would merge
+ * them (`give<Cf>me` becomes `giveme`), so evaluation also matches a variant
+ * where each format character is treated as a token separator.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function replaceFormatCharactersWithSpace(text) {
+  return text.replace(FORMAT_CHARACTERS, ' ');
+}
+
 // Non-global where `.test` is used so repeated calls never depend on
 // `lastIndex`.
 const LITERAL_FORMAT_CHARACTER = /[\p{Cf}\uFE00-\uFE0F]/u;
@@ -231,6 +246,23 @@ function hasUnstableEscape(source) {
     if (isUnstableCodePoint(codePoint)) {
       return true;
     }
+    // U+0020 is meaningful only between tokens. Input is trimmed before
+    // matching, so an escaped space at a source boundary, directly after a
+    // leading `^`, or directly before a trailing `$` can never match. This is
+    // deliberately conservative: it checks only direct anchor-adjacent
+    // positions, not arbitrary nesting such as `(?:^\x20)`. Numeric
+    // backreferences remain out of scope.
+    if (codePoint === 0x0020) {
+      const escapeEnd = match.index + match[0].length;
+      if (
+        match.index === 0 ||
+        escapeEnd === source.length ||
+        (match.index === 1 && source[0] === '^') ||
+        (escapeEnd === source.length - 1 && source[source.length - 1] === '$')
+      ) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -250,6 +282,11 @@ function hasInertLiteralWhitespace(source) {
       return true;
     }
     if (previous === undefined || next === undefined) {
+      return true;
+    }
+    // An escaped space as the very first character (`\ foo`) is inert for the
+    // same trimming reason; an escaped internal space (`a\ b`) stays valid.
+    if (index === 1 && source[0] === '\\') {
       return true;
     }
     // A space directly inside a leading `^` or trailing `$` anchor would be
@@ -274,13 +311,18 @@ function hasInertLiteralWhitespace(source) {
  * literal whitespace other than a single internal `U+0020`, or a regex escape
  * targeting one of those code points cannot behave as written against
  * normalized input, so configuration rejects it rather than compiling a
- * silently inert rule. Escape scanning respects backslash parity, so an
- * escaped backslash followed by `u200B` text stays stable. Numeric
- * backreferences `\1`-`\9` are intentionally not analysed because they are
- * ambiguous with legacy octal escapes.
+ * silently inert rule. An escaped `U+0020` is likewise rejected at the very
+ * start or end of the source, directly after a leading `^`, or directly
+ * before a trailing `$`, because input is trimmed before matching; an internal
+ * escaped space such as `a\x20b` stays meaningful. Escape scanning respects
+ * backslash parity, so an escaped backslash followed by `u200B` text stays
+ * stable. Numeric backreferences `\1`-`\9` are intentionally not analysed
+ * because they are ambiguous with legacy octal escapes.
  *
- * This check is conservative: it does not prove that a source can match, and
- * arbitrary regex semantics are not fully analysed.
+ * This check is conservative: it does not prove that a source can match,
+ * arbitrary regex semantics are not fully analysed, and only direct
+ * anchor-adjacent escaped spaces are detected (not arbitrary nesting such as
+ * `(?:^\x20)`).
  *
  * @param {string} source
  * @returns {boolean} `true` when the source contains no literal character or

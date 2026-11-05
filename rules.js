@@ -25,6 +25,7 @@ import {
   isBuiltInRuleSource,
   isNormalizationStableSource,
   isWhitespaceOnlySource,
+  replaceFormatCharactersWithSpace,
   stripFormatCharacters,
 } from './rule-defaults.js';
 
@@ -171,18 +172,30 @@ export function compileRules(config) {
  * Produce the variants a message is matched against without retaining the
  * original text.
  *
- * NFKC folds full-width forms, every Cf format character and variation
- * selector is erased, and the result is trimmed. Two variants are produced
- * because whitespace has two meanings: keeping a single space between tokens
- * preserves English word patterns such as `show system prompt`, while removing
- * it catches separators inserted inside a CJK token (`打 印 config.json`).
- * The whitespace-free variant is omitted when it equals the collapsed one.
+ * NFKC folds full-width forms and the text is trimmed. Three variants cover
+ * the three meanings whitespace has under normalization:
+ *
+ * 1. Cf format characters and variation selectors are erased, whitespace
+ *    collapses to one space: English token spacing such as `show system
+ *    prompt` is preserved.
+ * 2. The same stripped text has all whitespace removed: separators inserted
+ *    inside a CJK token (`打 印 config.json`) are caught.
+ * 3. Each Cf format character and variation selector is replaced by one
+ *    space instead of being erased: a format character cannot silently
+ *    replace an inter-token space (`give<Cf>me` still matches `give me`).
+ *
+ * Variants are deduplicated while preserving this order, so plain text
+ * produces one or two entries instead of three.
  */
 function normalizeVariants(text) {
-  const folded = stripFormatCharacters(text.normalize('NFKC')).trim();
-  const collapsed = folded.replace(WHITESPACE_RUN, ' ').trim();
-  const compact = folded.replace(WHITESPACE_RUN, '');
-  return compact === collapsed ? [collapsed] : [collapsed, compact];
+  const folded = text.normalize('NFKC');
+  const stripped = stripFormatCharacters(folded).trim();
+  const collapsed = stripped.replace(WHITESPACE_RUN, ' ').trim();
+  const compact = stripped.replace(WHITESPACE_RUN, '');
+  const spaced = replaceFormatCharactersWithSpace(folded)
+    .replace(WHITESPACE_RUN, ' ')
+    .trim();
+  return [...new Set([collapsed, compact, spaced])];
 }
 
 function firstMatch(rules, variants) {
