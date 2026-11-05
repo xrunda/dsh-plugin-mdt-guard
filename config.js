@@ -139,17 +139,23 @@ function requireStringArray(value, field) {
 
 /**
  * Validate a regular-expression source array. Shape errors keep the existing
- * `CONFIG_FIELD_INVALID` contract. A source that does not compile raises
- * `CONFIG_RULE_INVALID` for the indexed field only; the pattern itself is
- * never attached to the message.
+ * `CONFIG_FIELD_INVALID` contract. Empty or whitespace-only sources are
+ * rejected as `CONFIG_FIELD_INVALID` before compilation because a regex built
+ * from them matches every message, which would fail open. A non-empty source
+ * that does not compile raises `CONFIG_RULE_INVALID` for the indexed field
+ * only; no source text is ever attached to the message.
  */
 function requireRegexArray(value, field) {
   requireStringArray(value, field);
   for (const [index, source] of value.entries()) {
+    const indexedField = `${field}[${index}]`;
+    if (source.trim().length === 0) {
+      fail(CONFIG_FIELD_INVALID, indexedField);
+    }
     try {
-      new RegExp(source, RULE_REGEX_FLAGS);
+      RegExp(source, RULE_REGEX_FLAGS);
     } catch {
-      fail(CONFIG_RULE_INVALID, `${field}[${index}]`);
+      fail(CONFIG_RULE_INVALID, indexedField);
     }
   }
 }

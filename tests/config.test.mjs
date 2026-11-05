@@ -5,7 +5,13 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { ConfigError, loadConfig, validateConfig } from '../config.js';
-import { FAST_ALLOW_DEFAULT_SOURCES, HARD_DENY_DEFAULT_SOURCES } from '../rule-defaults.js';
+import {
+  FAST_ALLOW_DEFAULT_SOURCES,
+  FAST_ALLOW_RULES,
+  HARD_DENY_DEFAULT_SOURCES,
+  HARD_DENY_RULES,
+  RULE_REGEX_FLAGS,
+} from '../rule-defaults.js';
 
 const refusalText =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
@@ -27,6 +33,10 @@ function assertConfigError(input, code, field, options = {}) {
         assert.ok(
           !error.message.includes(forbidden),
           `${label}: error message must not include forbidden text`,
+        );
+        assert.ok(
+          !String(error).includes(forbidden),
+          `${label}: stringified error must not include forbidden text`,
         );
       }
       return true;
@@ -245,15 +255,99 @@ test('omitted and empty rule arrays use the built-in sources', () => {
   assert.notEqual(empty.fastAllow, omitted.fastAllow);
 });
 
-test('non-empty rule arrays replace the built-in sources', () => {
-  const result = validateConfig({
-    enabled: false,
-    hardDeny: ['^custom-deny$'],
-    fastAllow: ['^custom-allow$'],
-  });
+test('non-empty rule arrays replace the built-in sources with fresh arrays', () => {
+  const hardDeny = ['^custom-deny$'];
+  const fastAllow = ['^custom-allow$'];
+  const result = validateConfig({ enabled: false, hardDeny, fastAllow });
 
   assert.deepEqual(result.hardDeny, ['^custom-deny$']);
   assert.deepEqual(result.fastAllow, ['^custom-allow$']);
+  assert.notEqual(result.hardDeny, hardDeny, 'hardDeny must be a fresh array');
+  assert.notEqual(result.fastAllow, fastAllow, 'fastAllow must be a fresh array');
+  assert.notEqual(
+    result.hardDeny,
+    HARD_DENY_DEFAULT_SOURCES,
+    'hardDeny must not reuse the default source array',
+  );
+  assert.notEqual(
+    result.fastAllow,
+    FAST_ALLOW_DEFAULT_SOURCES,
+    'fastAllow must not reuse the default source array',
+  );
+});
+
+test('built-in rule catalogs are complete, ordered, and compile with RULE_REGEX_FLAGS', () => {
+  const expectedHardDeny = [
+    ['hard-deny.prompt-injection', 'H'],
+    ['hard-deny.role-switch', 'H'],
+    ['hard-deny.system-prompt-exfiltration', 'H'],
+    ['hard-deny.any-question-permission', 'H'],
+    ['hard-deny.jailbreak', 'H'],
+    ['hard-deny.sensitive-path', 'G'],
+    ['hard-deny.read-sensitive', 'G'],
+    ['hard-deny.read-sensitive-reverse', 'G'],
+    ['hard-deny.command-exec', 'G'],
+    ['hard-deny.software-install', 'G'],
+    ['hard-deny.config-modify', 'G'],
+    ['hard-deny.service-ops', 'G'],
+  ];
+  const expectedFastAllow = [
+    ['fast-allow.greeting', 'D'],
+    ['fast-allow.continuation', 'D'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+  ];
+
+  for (const [label, rules, expected] of [
+    ['HARD_DENY_RULES', HARD_DENY_RULES, expectedHardDeny],
+    ['FAST_ALLOW_RULES', FAST_ALLOW_RULES, expectedFastAllow],
+  ]) {
+    assert.ok(rules.length > 0, `${label} must not be empty`);
+    assert.deepEqual(
+      rules.map((rule) => [rule.id, rule.category]),
+      expected,
+      `${label} ids and categories must match the documented order`,
+    );
+    for (const rule of rules) {
+      assert.equal(typeof rule.source, 'string', `${rule.id}: source must be a string`);
+      assert.doesNotThrow(
+        () => RegExp(rule.source, RULE_REGEX_FLAGS),
+        `${rule.id}: source must compile with RULE_REGEX_FLAGS`,
+      );
+    }
+  }
+});
+
+test('empty and whitespace-only rule sources are rejected before compilation', () => {
+  for (const [field, input, forbidden] of [
+    ['hardDeny[0]', { hardDeny: [''] }, ''],
+    ['fastAllow[0]', { fastAllow: ['   '] }, '   '],
+  ]) {
+    assertConfigError(
+      { enabled: false, ...input },
+      'CONFIG_FIELD_INVALID',
+      field,
+      { label: field, forbidden: forbidden === '' ? [] : [forbidden] },
+    );
+  }
+});
+
+test('sparse rule arrays are rejected as CONFIG_FIELD_INVALID', () => {
+  assertConfigError(
+    withField(['hardDeny'], [, 'x']),
+    'CONFIG_FIELD_INVALID',
+    'hardDeny',
+    { label: 'hardDeny sparse' },
+  );
+  assertConfigError(
+    withField(['fastAllow'], [, 'x']),
+    'CONFIG_FIELD_INVALID',
+    'fastAllow',
+    { label: 'fastAllow sparse' },
+  );
 });
 
 test('invalid rule regular expressions raise a sanitized CONFIG_RULE_INVALID error', () => {

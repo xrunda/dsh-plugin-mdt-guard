@@ -118,10 +118,14 @@ export function evaluateRules(ruleSet, text) -> {
 
 ## Error Handling
 
-- New stable code `CONFIG_RULE_INVALID`; field is `hardDeny[<index>]` or
-  `fastAllow[<index>]`.
-- Message template: `Invalid regular expression in configuration field
-  "<field>"`. No pattern, input text, parser detail or `cause`.
+- Empty or whitespace-only sources are rejected before compilation as
+  `CONFIG_FIELD_INVALID` with the indexed field (`hardDeny[<index>]` or
+  `fastAllow[<index>]`). An empty pattern would match every message, so it is
+  treated as a fail-open configuration error rather than an invalid regex.
+- Only non-empty sources are compiled. A source with invalid syntax raises
+  `CONFIG_RULE_INVALID` with the indexed field.
+- Message templates identify the field only. No pattern, input text, parser
+  detail or `cause` is attached.
 - `compileRules` accepts a raw config object and applies the same empty ->
   built-in rule; it throws `TypeError` only for a non-object config.
 
