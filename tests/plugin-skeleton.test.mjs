@@ -55,6 +55,15 @@ test('package manifest defines the private ESM bundle contract', async () => {
       `files must include ${localePath} directly or through the locale directory`,
     );
   }
+
+  assert.equal(manifest.exports?.['./config'], './config.js');
+  assert.ok(files.includes('config.js'), 'files must include config.js');
+  for (const entry of files) {
+    assert.ok(
+      !/^(?:Docs|tests)(?:\/|$)/.test(entry),
+      `files must not include ${entry}`,
+    );
+  }
 });
 
 test('bundle patch registers one empty MDT guard plugin row', async () => {

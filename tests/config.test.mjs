@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -604,4 +604,15 @@ test('invalid field values never expose sentinel secrets', async (t) => {
     error.message.includes('classifier.timeoutMs'),
     'error must identify classifier.timeoutMs',
   );
+});
+
+test('the documented example is valid and contains no credentials', async () => {
+  const text = await readFile(new URL('../Docs/guard.example.json', import.meta.url), 'utf8');
+  const example = JSON.parse(text);
+  const normalized = validateConfig(example);
+
+  assert.equal(normalized.enabled, true);
+  assert.match(normalized.classifier.baseUrl, /^https:\/\/classifier\.example\.invalid\//);
+  assert.equal(Object.hasOwn(example.classifier, 'apiKey'), false);
+  assert.equal(Object.hasOwn(normalized.classifier, 'apiKey'), false);
 });

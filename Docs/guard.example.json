@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "classifier": {
+    "baseUrl": "https://classifier.example.invalid/v1",
+    "model": "mdt-classifier-example",
+    "timeoutMs": 1500,
+    "maxTokens": 200
+  },
+  "contextTurns": 3,
+  "failOpen": true,
+  "hardDeny": [],
+  "fastAllow": [],
+  "refusalText": "本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。",
+  "audit": {
+    "enabled": true,
+    "storeText": false,
+    "retentionDays": 30
+  },
+  "tools": {
+    "allow": [],
+    "deny": []
+  }
+}
