@@ -420,6 +420,27 @@ test('loadConfig treats a missing explicit path as defaults and creates nothing'
   await assert.rejects(stat(filePath), { code: 'ENOENT' });
 });
 
+test('loadConfig does not fall back to the default path for a null filePath', async (t) => {
+  const home = await makeTempDir(t);
+  const configDir = join(home, '.dsh', 'mdt');
+  await mkdir(configDir, { recursive: true });
+  await writeFile(join(configDir, 'guard.json'), JSON.stringify({ enabled: false }));
+
+  await withIsolatedHome(home, () =>
+    assertLoadError(loadConfig({ filePath: null }), 'CONFIG_READ_FAILED'),
+  );
+});
+
+test('loadConfig accepts a UTF-8 BOM before valid JSON', async (t) => {
+  const dir = await makeTempDir(t);
+  const filePath = join(dir, 'bom.json');
+  await writeFile(filePath, `﻿${JSON.stringify({ enabled: false })}`);
+
+  const config = await loadConfig({ filePath });
+  assert.equal(config.enabled, false);
+  assert.equal('baseUrl' in config.classifier, false);
+});
+
 test('loadConfig returns a normalized enabled configuration from disk', async (t) => {
   const dir = await makeTempDir(t);
   const filePath = join(dir, 'guard.json');

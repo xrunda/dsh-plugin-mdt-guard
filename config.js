@@ -332,17 +332,22 @@ export function validateConfig(input) {
  * @throws {ConfigError}
  */
 export async function loadConfig({ filePath } = {}) {
-  const resolvedPath = filePath ?? join(homedir(), '.dsh', 'mdt', 'guard.json');
+  const resolvedPath =
+    filePath === undefined ? join(homedir(), '.dsh', 'mdt', 'guard.json') : filePath;
 
-  let text;
+  let rawText;
   try {
-    text = await readFile(resolvedPath, 'utf8');
+    rawText = await readFile(resolvedPath, 'utf8');
   } catch (error) {
     if (typeof error === 'object' && error !== null && error.code === 'ENOENT') {
       return validateConfig({});
     }
     throw new ConfigError(CONFIG_READ_FAILED, 'config', 'Unable to read configuration file');
   }
+
+  // Tolerate a single UTF-8 BOM before the JSON document. Nothing else is
+  // rewritten: whitespace and all remaining text reach JSON.parse unchanged.
+  const text = rawText.startsWith('﻿') ? rawText.slice(1) : rawText;
 
   let parsed;
   try {
