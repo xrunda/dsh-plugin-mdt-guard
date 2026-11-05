@@ -10,21 +10,24 @@ function assertConfigError(input, code, field, options = {}) {
   assert.equal(typeof field, 'string', 'field must be a string');
   assert.ok(field, 'field must be a non-empty string');
 
+  const label = options.label ?? field;
+
   assert.throws(
     () => validateConfig(input),
     (error) => {
-      assert.equal(error.name, 'ConfigError');
-      assert.equal(error.code, code);
-      assert.ok(error.message.includes(field), `error message must identify ${field}`);
+      assert.equal(error.name, 'ConfigError', `${label}: expected ConfigError`);
+      assert.equal(error.code, code, `${label}: unexpected error code`);
+      assert.ok(error.message.includes(field), `${label}: error message must identify ${field}`);
+      assert.equal(error.cause, undefined, `${label}: ConfigError must not attach a cause`);
       for (const forbidden of options.forbidden ?? []) {
         assert.ok(
           !error.message.includes(forbidden),
-          `error message must not include ${forbidden}`,
+          `${label}: error message must not include forbidden text`,
         );
       }
       return true;
     },
-    options.label ?? field,
+    label,
   );
 }
 
