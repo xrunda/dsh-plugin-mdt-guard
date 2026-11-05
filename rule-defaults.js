@@ -122,7 +122,7 @@ export const FAST_ALLOW_DEFAULT_SOURCES = Object.freeze(
 // character plus the variation-selector range U+FE00-U+FE0F. Written with
 // escapes so no invisible literal lives in this source file. Non-global so
 // repeated `test` calls do not depend on `lastIndex`.
-const NORMALIZATION_UNSTABLE = /[\p{Cf}︀-️]/u;
+const NORMALIZATION_UNSTABLE = /[\p{Cf}\uFE00-\uFE0F]/u;
 
 /**
  * Whether a literal regex source can ever match normalized input.
