@@ -96,3 +96,52 @@ test('localized metadata and package icon are present and local', async () => {
     'icon must not reference external URLs',
   );
 });
+
+test('plugin entry is callable and does not inspect context or config', async () => {
+  const plugin = await import('../index.js');
+  const accessedProperties = [];
+  const context = new Proxy({}, {
+    get(_target, property) {
+      accessedProperties.push(property);
+      throw new Error(`unexpected context access: ${String(property)}`);
+    },
+  });
+
+  assert.equal(typeof plugin.apply, 'function');
+  assert.equal(plugin.apply(context, {}), undefined);
+  assert.deepEqual(accessedProperties, [], 'entry must not register host resources');
+});
+
+test('declaration file includes the approved structural contracts', async () => {
+  const contracts = await readRequiredText('../types/contracts.d.ts');
+  const compact = (value) => value.replace(/\s+/g, ' ').trim();
+
+  for (const declaration of [
+    "export type SessionState = 'in_scope' | 'out_of_scope' | 'unknown';",
+    "export type Category = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';",
+    "export type Decision = 'allow' | 'deny' | 'unknown';",
+    `export interface GateInput {
+      sessionId: string;
+      currentMessage: string;
+      recentMessages: ReadonlyArray<{ role: 'user' | 'assistant'; content: string }>;
+      sessionState: SessionState;
+    }`,
+    `export interface GateDecision {
+      decision: Decision;
+      category: Category;
+      reason: string;
+      confidence: number;
+    }`,
+    `export interface ConfigProvider<TConfig> {
+      load(): Promise<TConfig>;
+    }`,
+    `export interface AuditWriter<TEvent> {
+      write(event: TEvent): Promise<void>;
+    }`,
+  ]) {
+    assert.ok(
+      compact(contracts).includes(compact(declaration)),
+      `declaration file must include ${declaration.split('\n')[0]}`,
+    );
+  }
+});
