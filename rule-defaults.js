@@ -18,7 +18,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.role-switch',
     category: 'H',
-    source: String.raw`(?:(?:扮演|假装|充当).{0,6}(?:医生|专家|护士|黑客|角色|助手|AI|模型)|(?:作为|变成|你现在是|从现在开始你是).{0,6}(?:角色|助手|AI|人工智能|模型|黑客))|(?:act\s+as|pretend\s+to\s+be|you\s+are\s+now).{0,24}(?:doctor|expert|hacker|assistant|ai|model|role)`,
+    source: String.raw`(?:(?:扮演|假装|充当|切换|更换).{0,6}(?:医生|专家|护士|黑客|角色|助手|AI|模型)|(?:作为|变成|你现在是|从现在开始你是).{0,6}(?:角色|AI|人工智能|模型|黑客))|(?:act\s+as|pretend\s+to\s+be|you\s+are\s+now).{0,24}(?:doctor|expert|hacker|assistant|model|role|\bai\b)`,
   }),
   Object.freeze({
     id: 'hard-deny.system-prompt-exfiltration',
@@ -28,7 +28,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.any-question-permission',
     category: 'H',
-    source: String.raw`(现在|从此|以后|接下来).{0,6}(可以|能|允许|尽管).{0,6}(回答|处理|讨论|聊).{0,6}(任何|所有|一切|任意)|(?:from\s+now\s+on|now|you\s+can).{0,24}(?:answer|discuss|handle|talk\s+about).{0,16}(?:anything|everything|any\s+topic|all\s+questions)`,
+    source: String.raw`(现在|从此|以后|接下来).{0,6}(可以|能|允许|尽管).{0,6}(回答|讨论|聊).{0,6}(任何|所有|一切|任意)(问题|话题|内容|提问|请求|领域|题目)|(?:from\s+now\s+on|now|you\s+can).{0,24}(?:answer|discuss|talk\s+about).{0,16}(?:anything|everything|any\s+topic|all\s+questions)`,
   }),
   Object.freeze({
     id: 'hard-deny.jailbreak',
@@ -63,7 +63,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.config-modify',
     category: 'G',
-    source: String.raw`(修改|更改|改一下|改掉|改|编辑|写入|覆盖|删除|删掉|清空|重置|更新).{0,12}(配置(?:文件|项|参数)|config(?:\.json)?|guard\.json|settings\.ya?ml|插件配置|系统配置|环境变量|\.env|系统设置|注册表|日志|HIS\s*(?:地址|配置))|(?:modify|change|edit|write|overwrite|delete|clear|reset|update).{0,16}(?:config(?:\.json)?|guard\.json|settings\.ya?ml|environment\s*variables?|registry|\.env|logs?)`,
+    source: String.raw`(修改|更改|改一下|改掉|改|编辑|写入|覆盖|删除|删掉|清空|重置|更新).{0,12}(配置(?:文件|项|参数)?|config(?:\.json)?|guard\.json|settings\.ya?ml|插件配置|系统配置|环境变量|\.env|系统设置|注册表|日志|HIS\s*(?:地址|配置))|(?:modify|change|edit|write|overwrite|delete|clear|reset|update).{0,16}(?:config(?:\.json)?|guard\.json|settings\.ya?ml|environment\s*variables?|registry|\.env|logs?)`,
   }),
   Object.freeze({
     id: 'hard-deny.service-ops',
@@ -86,7 +86,7 @@ export const FAST_ALLOW_RULES = Object.freeze([
   Object.freeze({
     id: 'fast-allow.software-help',
     category: 'C',
-    source: String.raw`(插件|本软件|这个软件|该软件|本系统|这个系统|平台|界面|按钮|功能|菜单|页面|PPT|演示文稿|版本|安装包|客户端|网页|登录页).{0,12}(怎么|如何|怎样|在哪|哪里|哪儿|咋)`,
+    source: String.raw`(插件|本软件|这个软件|该软件|平台|界面|按钮|菜单|页面|PPT|演示文稿|版本|安装包|客户端|网页|登录页).{0,12}(怎么|如何|怎样|在哪|哪里|哪儿|咋)`,
   }),
   Object.freeze({
     id: 'fast-allow.software-help',
@@ -96,7 +96,7 @@ export const FAST_ALLOW_RULES = Object.freeze([
   Object.freeze({
     id: 'fast-allow.software-help',
     category: 'C',
-    source: String.raw`(插件|软件|系统|平台|PPT|版本|功能|按钮|界面).{0,12}(怎么用|如何使用|在哪下载|在哪里下载|怎么下载|怎么安装|怎么更新|怎么升级|怎么登录|怎么导出|怎么预览|怎么生成|怎么打开|怎么设置|怎么配置|支持哪些|有什么功能)`,
+    source: String.raw`(插件|软件|平台|PPT|版本|按钮|界面).{0,12}(怎么用|如何使用|在哪下载|在哪里下载|怎么下载|怎么安装|怎么更新|怎么升级|怎么登录|怎么导出|怎么预览|怎么生成|怎么打开|怎么设置|怎么配置|支持哪些|有什么功能)`,
   }),
   Object.freeze({
     id: 'fast-allow.software-help',
@@ -117,3 +117,25 @@ export const HARD_DENY_DEFAULT_SOURCES = Object.freeze(
 export const FAST_ALLOW_DEFAULT_SOURCES = Object.freeze(
   FAST_ALLOW_RULES.map((rule) => rule.source),
 );
+
+// Characters erased by evaluation normalization: every Unicode `Cf` format
+// character plus the variation-selector range U+FE00-U+FE0F. Written with
+// escapes so no invisible literal lives in this source file. Non-global so
+// repeated `test` calls do not depend on `lastIndex`.
+const NORMALIZATION_UNSTABLE = /[\p{Cf}︀-️]/u;
+
+/**
+ * Whether a literal regex source can ever match normalized input.
+ *
+ * Evaluation normalization erases `Cf` characters and variation selectors and
+ * NFKC-folds the text. A literal source containing such characters can never
+ * match normalized input, so configuration rejects it instead of letting an
+ * administrator's rule silently do nothing. Callers exempt exact built-in
+ * sources, some of which legitimately contain full-width punctuation.
+ *
+ * @param {string} source
+ * @returns {boolean}
+ */
+export function isNormalizationStableSource(source) {
+  return !NORMALIZATION_UNSTABLE.test(source) && source.normalize('NFKC') === source;
+}

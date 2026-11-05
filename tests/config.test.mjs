@@ -355,7 +355,7 @@ test('empty and whitespace-only rule sources are rejected before compilation', (
   }
 });
 
-test('NEL-only sources are rejected and zero-width-only sources are accepted', () => {
+test('NEL-only sources are whitespace-rejected and zero-width-only sources are rule-rejected', () => {
   // `\s` and String#trim() both miss U+0085 (NEL), so the validator uses a
   // Unicode-complete full-string whitespace predicate and rejects it.
   assertConfigError(
@@ -365,22 +365,52 @@ test('NEL-only sources are rejected and zero-width-only sources are accepted', (
     { label: 'hardDeny NEL-only', forbidden: ['\u0085'] },
   );
 
-  // U+200B is not whitespace, so a zero-width-only source is accepted and
-  // returned verbatim. Evaluation normalization strips it, so the rule is
-  // inert rather than fail-open.
-  const zeroWidthOnly = '\u200B';
-  assert.deepEqual(
-    validateConfig({ enabled: false, hardDeny: [zeroWidthOnly] }).hardDeny,
-    [zeroWidthOnly],
+  // U+200B is not whitespace but is a Unicode Cf character erased by
+  // evaluation normalization, so a zero-width-only source would be silently
+  // inert. It is rejected at the indexed field as CONFIG_RULE_INVALID.
+  assertConfigError(
+    { enabled: false, hardDeny: ['\u200B'] },
+    'CONFIG_RULE_INVALID',
+    'hardDeny[0]',
+    { label: 'hardDeny U+200B-only', forbidden: ['\u200B'] },
   );
 
-  // U+FEFF (BOM) is whitespace, so a BOM-only source is rejected.
+  // U+FEFF (BOM) is whitespace, so a BOM-only source is rejected earlier as
+  // CONFIG_FIELD_INVALID.
   assertConfigError(
     { enabled: false, hardDeny: ['\uFEFF'] },
     'CONFIG_FIELD_INVALID',
     'hardDeny[0]',
     { label: 'hardDeny BOM-only', forbidden: ['\uFEFF'] },
   );
+});
+
+test('normalization-unstable sources are rejected with sanitized rule errors', () => {
+  // Literal Cf characters, variation selectors and any characters NFKC would
+  // fold can never match normalized input, so an administrator's rule would
+  // be silently inert. Both fields reject them with CONFIG_RULE_INVALID, and
+  // the source text never appears in the error.
+  const unstableSources = ['\u200B\u5FFD\u7565', '\u5FFD\u00AD\u7565', '\uFF29\uFF27\uFF2E\uFF2F\uFF32\uFF25', '\uFF43\uFF4F\uFF4E\uFF46\uFF49\uFF47'];
+  for (const fieldName of ['hardDeny', 'fastAllow']) {
+    for (const source of unstableSources) {
+      assertConfigError(
+        { enabled: false, [fieldName]: [source] },
+        'CONFIG_RULE_INVALID',
+        `${fieldName}[0]`,
+        { label: `${fieldName}: unstable source`, forbidden: [source] },
+      );
+    }
+  }
+});
+
+test('an exact built-in source with full-width punctuation is still accepted verbatim', () => {
+  // The greeting source legitimately contains full-width punctuation that
+  // NFKC would fold, so exact built-in sources are exempt from the stability
+  // check and are returned verbatim.
+  const greeting = FAST_ALLOW_DEFAULT_SOURCES[0];
+  const result = validateConfig({ enabled: false, fastAllow: [greeting] });
+
+  assert.deepEqual(result.fastAllow, [greeting]);
 });
 
 test('meaningful surrounding whitespace in rule sources is preserved', () => {

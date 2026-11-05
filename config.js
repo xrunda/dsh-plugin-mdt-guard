@@ -16,6 +16,7 @@ import {
   FAST_ALLOW_DEFAULT_SOURCES,
   HARD_DENY_DEFAULT_SOURCES,
   RULE_REGEX_FLAGS,
+  isNormalizationStableSource,
 } from './rule-defaults.js';
 
 const REFUSAL_TEXT =
@@ -75,6 +76,14 @@ const CONFIG_UNKNOWN_FIELD = 'CONFIG_UNKNOWN_FIELD';
 const CONFIG_JSON_INVALID = 'CONFIG_JSON_INVALID';
 const CONFIG_READ_FAILED = 'CONFIG_READ_FAILED';
 const CONFIG_RULE_INVALID = 'CONFIG_RULE_INVALID';
+
+// Every built-in source, from both catalogs. Exact built-in sources are exempt
+// from the normalization-stability guard because some legitimately contain
+// full-width punctuation that NFKC would fold.
+const BUILT_IN_SOURCES = new Set([
+  ...HARD_DENY_DEFAULT_SOURCES,
+  ...FAST_ALLOW_DEFAULT_SOURCES,
+]);
 
 /**
  * Sanitized configuration error. Messages are built only from fixed templates
@@ -146,11 +155,12 @@ function requireStringArray(value, field) {
  * fails open. An empty `hardDeny` source matches every message and denies
  * everything, which is a fail-closed availability loss rather than
  * fail-open. Whitespace-only sources are meaningless and can match most
- * normalized multi-word messages. Zero-width accuracy: sources made only of
- * characters stripped by evaluation normalization (U+200B-U+200D, U+FEFF)
- * are inert; U+FEFF is rejected here as whitespace; other zero-width
- * characters (for example U+200E, U+2060, U+00AD) are neither stripped nor
- * rejected. A non-empty source that does not compile raises
+ * normalized multi-word messages. A custom source that evaluation
+ * normalization would erase or fold is rejected: literals containing a Unicode
+ * Cf format character or a variation selector (U+FE00-U+FE0F), and any literal
+ * that NFKC would change, raise `CONFIG_RULE_INVALID` at the indexed field.
+ * Exact built-in sources are exempt because some legitimately contain
+ * full-width punctuation. A non-empty source that does not compile raises
  * `CONFIG_RULE_INVALID` for the indexed field only; no source text is ever
  * attached to the message.
  */
@@ -160,6 +170,9 @@ function requireRegexArray(value, field) {
     const indexedField = `${field}[${index}]`;
     if (/^[\s\u0085]*$/.test(source)) {
       fail(CONFIG_FIELD_INVALID, indexedField);
+    }
+    if (!BUILT_IN_SOURCES.has(source) && !isNormalizationStableSource(source)) {
+      fail(CONFIG_RULE_INVALID, indexedField);
     }
     try {
       RegExp(source, RULE_REGEX_FLAGS);

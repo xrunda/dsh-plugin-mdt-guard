@@ -14,9 +14,12 @@
 
 import { ConfigError } from './config.js';
 import {
+  FAST_ALLOW_DEFAULT_SOURCES,
   FAST_ALLOW_RULES,
+  HARD_DENY_DEFAULT_SOURCES,
   HARD_DENY_RULES,
   RULE_REGEX_FLAGS,
+  isNormalizationStableSource,
 } from './rule-defaults.js';
 
 const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
@@ -30,9 +33,17 @@ const ERROR_TEMPLATES = {
 // A full-string whitespace predicate equivalent to /^[\s\u0085]*$/.
 // String#trim() and \s alone miss U+0085 (NEL).
 const WHITESPACE_ONLY = /^[\s\u0085]*$/;
-// Zero-width characters stripped before matching. Kept as explicit escapes so
-// no invisible literal ever lives in this source file.
-const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
+// Evaluation erases every Unicode Cf format character and the variation
+// selectors U+FE00-U+FE0F. Kept as explicit escapes so no invisible literal
+// ever lives in this source file.
+const FORMAT_CHARS = /[\p{Cf}\uFE00-\uFE0F]/gu;
+// Every built-in source, from both catalogs. Exact built-in sources are exempt
+// from the normalization-stability guard because some legitimately contain
+// full-width punctuation that NFKC would fold.
+const ALL_BUILT_IN_SOURCES = new Set([
+  ...HARD_DENY_DEFAULT_SOURCES,
+  ...FAST_ALLOW_DEFAULT_SOURCES,
+]);
 // Collapse all whitespace, including U+0085 (NEL), to a single space. NEL is
 // matched explicitly because `\s` does not include it; this must stay in
 // parity with config.js's /^[\s\u0085]*$/ source predicate.
@@ -109,6 +120,13 @@ function compileField(value, field, builtInRules, builtInSourceMetadata) {
       fail(CONFIG_FIELD_INVALID, indexedField);
     }
 
+    // A custom source containing characters evaluation normalization erases or
+    // folds could never match; reject it rather than compile a silently inert
+    // rule. Exact built-in sources keep their catalog identity and are exempt.
+    if (!ALL_BUILT_IN_SOURCES.has(source) && !isNormalizationStableSource(source)) {
+      fail(CONFIG_RULE_INVALID, indexedField);
+    }
+
     let regexp;
     try {
       regexp = new RegExp(source, RULE_REGEX_FLAGS);
@@ -165,24 +183,29 @@ export function compileRules(config) {
 }
 
 /**
- * Normalize a message for rule matching without retaining the original text.
+ * Produce the variants a message is matched against without retaining the
+ * original text.
  *
- * NFKC folds full-width forms, zero-width characters are removed, whitespace
- * (including U+0085 NEL) runs collapse to one space, and the result is
- * trimmed.
+ * NFKC folds full-width forms, every Cf format character and variation
+ * selector is erased, and the result is trimmed. Two variants are produced
+ * because whitespace has two meanings: keeping a single space between tokens
+ * preserves English word patterns such as `show system prompt`, while removing
+ * it catches separators inserted inside a CJK token (`打 印 config.json`).
+ * The whitespace-free variant is omitted when it equals the collapsed one.
  */
-function normalizeText(text) {
-  return text
-    .normalize('NFKC')
-    .replace(ZERO_WIDTH, '')
-    .replace(WHITESPACE_RUN, ' ')
-    .trim();
+function normalizeVariants(text) {
+  const folded = text.normalize('NFKC').replace(FORMAT_CHARS, '').trim();
+  const collapsed = folded.replace(WHITESPACE_RUN, ' ').trim();
+  const compact = folded.replace(WHITESPACE_RUN, '');
+  return compact === collapsed ? [collapsed] : [collapsed, compact];
 }
 
-function firstMatch(rules, text) {
+function firstMatch(rules, variants) {
   for (const rule of rules) {
-    if (rule.regexp.test(text)) {
-      return rule;
+    for (const variant of variants) {
+      if (rule.regexp.test(variant)) {
+        return rule;
+      }
     }
   }
   return undefined;
@@ -191,8 +214,9 @@ function firstMatch(rules, text) {
 /**
  * Evaluate one message against a compiled rule set.
  *
- * Hard-deny rules run in order before any fast-allow rule, so a message that
- * matches both is denied. No match returns `unknown` for the classifier path.
+ * Hard-deny rules run in order, across every normalization variant, before any
+ * fast-allow rule, so a message that matches both is denied. No match returns
+ * `unknown` for the classifier path.
  *
  * @param {{ hardDeny: ReadonlyArray<object>, fastAllow: ReadonlyArray<object> }} ruleSet
  * @param {string} text
@@ -204,9 +228,9 @@ export function evaluateRules(ruleSet, text) {
     throw new TypeError('evaluateRules expects a string message');
   }
 
-  const normalized = normalizeText(text);
+  const variants = normalizeVariants(text);
 
-  const denied = firstMatch(ruleSet.hardDeny, normalized);
+  const denied = firstMatch(ruleSet.hardDeny, variants);
   if (denied !== undefined) {
     return Object.freeze({
       decision: 'deny',
@@ -215,7 +239,7 @@ export function evaluateRules(ruleSet, text) {
     });
   }
 
-  const allowed = firstMatch(ruleSet.fastAllow, normalized);
+  const allowed = firstMatch(ruleSet.fastAllow, variants);
   if (allowed !== undefined) {
     return Object.freeze({
       decision: 'allow',
