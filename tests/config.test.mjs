@@ -1,21 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+
 import { validateConfig } from '../config.js';
 
 const refusalText =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
 
-function assertConfigError(input, code, field) {
+function assertConfigError(input, code, field, options = {}) {
+  assert.equal(typeof field, 'string', 'field must be a string');
+  assert.ok(field, 'field must be a non-empty string');
+
   assert.throws(
     () => validateConfig(input),
     (error) => {
       assert.equal(error.name, 'ConfigError');
       assert.equal(error.code, code);
-      if (field) {
-        assert.ok(error.message.includes(field), `error message must identify ${field}`);
+      assert.ok(error.message.includes(field), `error message must identify ${field}`);
+      for (const forbidden of options.forbidden ?? []) {
+        assert.ok(
+          !error.message.includes(forbidden),
+          `error message must not include ${forbidden}`,
+        );
       }
       return true;
     },
+    options.label ?? field,
   );
 }
 
@@ -107,20 +116,52 @@ test('enabled configuration merges nested defaults and replaces supplied arrays'
       deny: ['unsafe-tool'],
     },
   });
-  assert.deepEqual(input.tools.allow, ['lookup', 'consult']);
   assert.deepEqual(input, original, 'validation must not mutate its input');
 });
 
 test('non-empty tools.allow replaces defaults without mutating its input array', () => {
-  const allow = ['tool-one', 'tool-two'];
+  const allow = ['tool-two', 'tool-one'];
   const input = {
     enabled: false,
     tools: { allow },
   };
   const originalAllow = [...allow];
 
-  assert.deepEqual(validateConfig(input).tools.allow, ['tool-one', 'tool-two']);
+  const result = validateConfig(input);
+  assert.notEqual(result.tools.allow, allow);
+  assert.deepEqual(result.tools.allow, ['tool-two', 'tool-one']);
+  result.tools.allow.reverse();
   assert.deepEqual(allow, originalAllow);
+});
+
+test('omitted enabled defaults to true and still requires classifier connection fields', () => {
+  assertConfigError({}, 'CONFIG_FIELD_REQUIRED', 'classifier.baseUrl', {
+    label: 'empty input',
+  });
+});
+
+test('each call returns fresh normalized objects rather than shared defaults', () => {
+  const first = validateConfig({ enabled: false });
+  const second = validateConfig({ enabled: false });
+
+  assert.notEqual(first, second);
+  assert.notEqual(first.classifier, second.classifier);
+  assert.notEqual(first.audit, second.audit);
+  assert.notEqual(first.tools, second.tools);
+  assert.notEqual(first.hardDeny, second.hardDeny);
+  assert.notEqual(first.fastAllow, second.fastAllow);
+  assert.notEqual(first.tools.allow, second.tools.allow);
+  assert.notEqual(first.tools.deny, second.tools.deny);
+
+  first.hardDeny.push('mutated-deny');
+  first.fastAllow.push('mutated-allow');
+  first.tools.allow.push('mutated-tool');
+  first.audit.retentionDays = 999;
+
+  assert.deepEqual(second.hardDeny, []);
+  assert.deepEqual(second.fastAllow, []);
+  assert.deepEqual(second.tools.allow, []);
+  assert.equal(second.audit.retentionDays, 30);
 });
 
 test('enabled configuration requires classifier.baseUrl and classifier.model', () => {
@@ -143,17 +184,10 @@ test('enabled configuration requires classifier.baseUrl and classifier.model', (
       },
     ],
   ]) {
-    assert.throws(
-      () => validateConfig(input),
-      (error) => {
-        assert.equal(error.name, 'ConfigError');
-        assert.equal(error.code, 'CONFIG_FIELD_REQUIRED');
-        assert.ok(error.message.includes(missingField));
-        assert.ok(!error.message.includes(JSON.stringify(input)));
-        assert.ok(!error.message.includes('sentinel-api-key'));
-        return true;
-      },
-    );
+    assertConfigError(input, 'CONFIG_FIELD_REQUIRED', missingField, {
+      label: missingField,
+      forbidden: [JSON.stringify(input), 'sentinel-api-key'],
+    });
   }
 });
 
@@ -185,7 +219,7 @@ test('rejects incorrect field types and empty non-empty text fields', () => {
   ];
 
   for (const [input, field] of invalidCases) {
-    assertConfigError(input, 'CONFIG_FIELD_INVALID', field);
+    assertConfigError(input, 'CONFIG_FIELD_INVALID', field, { label: field });
   }
 });
 
@@ -196,7 +230,7 @@ test('rejects unknown top-level and nested keys', () => {
     [{ enabled: false, audit: { unexpected: true } }, 'audit.unexpected'],
     [{ enabled: false, tools: { unexpected: true } }, 'tools.unexpected'],
   ]) {
-    assertConfigError(input, 'CONFIG_UNKNOWN_FIELD', field);
+    assertConfigError(input, 'CONFIG_UNKNOWN_FIELD', field, { label: field });
   }
 });
 
@@ -215,6 +249,7 @@ test('classifier.baseUrl must be an absolute HTTP or HTTPS URL', () => {
       },
       'CONFIG_FIELD_INVALID',
       'classifier.baseUrl',
+      { label: `classifier.baseUrl=${JSON.stringify(baseUrl)}` },
     );
   }
 
@@ -250,12 +285,14 @@ test('accepts each numeric lower and upper bound and rejects values outside them
         withField(path, value),
         'CONFIG_FIELD_INVALID',
         path.join('.'),
+        { label: `${path.join('.')}=${value}` },
       );
     }
     assertConfigError(
       withField(path, minimum + 0.5),
       'CONFIG_FIELD_INVALID',
       path.join('.'),
+      { label: `${path.join('.')}=${minimum + 0.5}` },
     );
   }
 });
