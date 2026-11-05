@@ -158,13 +158,31 @@ const LITERAL_FORMAT_CHARACTER = /[\p{Cf}\uFE00-\uFE0F]/u;
 const WHITESPACE_CHARACTER = /[\s\u0085]/u;
 const FORMAT_CATEGORY_CHARACTER = /\p{Cf}/u;
 const VARIATION_SELECTOR = /[\uFE00-\uFE0F]/u;
+const WHITESPACE_ONLY = /^[\s\u0085]*$/;
+
+/**
+ * Whether a source is empty or contains only whitespace.
+ *
+ * `\s` and `String#trim()` both miss U+0085 (NEL), so the predicate names it
+ * explicitly. Shared by `config.js` and `rules.js` so both entry points reject
+ * exactly the same sources.
+ *
+ * @param {string} source
+ * @returns {boolean}
+ */
+export function isWhitespaceOnlySource(source) {
+  return WHITESPACE_ONLY.test(source);
+}
 
 // Global scanner used only with `String#matchAll`, which does not mutate the
 // regex `lastIndex`. Captures the target of `\uXXXX`, `\u{...}`, `\xXX`,
-// control escapes and the `\p{Cf}` / `\P{Cf}` / `\p{C}` / `\P{C}` category
-// escapes.
+// single-letter control escapes, control-letter escapes (`\cI`), octal
+// escapes (`\012`) and the `\p{Cf}` / `\P{Cf}` / `\p{C}` / `\P{C}` category
+// escapes. Numeric backreferences `\1`-`\9` are intentionally not analysed:
+// they are ambiguous with legacy octal escapes and out of scope for this
+// simple stability check.
 const ESCAPE_SCAN =
-  /\\(?:u\{([0-9A-Fa-f]+)}|u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|([tnrfv])|[pP]\{(Cf|C)})/g;
+  /\\(?:u\{([0-9A-Fa-f]+)}|u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|([tnrfv])|c([A-Za-z])|0([0-7]{1,2})|[pP]\{(Cf|C)})/g;
 
 function hasOddPrecedingBackslashes(source, index) {
   let count = 0;
@@ -192,7 +210,7 @@ function hasUnstableEscape(source) {
     if (hasOddPrecedingBackslashes(source, match.index)) {
       continue;
     }
-    const [, braced, unicode, hex, control, category] = match;
+    const [, braced, unicode, hex, control, controlLetter, octal, category] = match;
     if (control !== undefined || category !== undefined) {
       return true;
     }
@@ -201,8 +219,14 @@ function hasUnstableEscape(source) {
       codePoint = Number.parseInt(braced, 16);
     } else if (unicode !== undefined) {
       codePoint = Number.parseInt(unicode, 16);
-    } else {
+    } else if (hex !== undefined) {
       codePoint = Number.parseInt(hex, 16);
+    } else if (controlLetter !== undefined) {
+      // A control-letter escape encodes the letter's code point in its low
+      // five bits, so `\cI` targets U+0009 (tab) and `\cM` targets U+000D.
+      codePoint = controlLetter.toUpperCase().charCodeAt(0) & 0x1f;
+    } else {
+      codePoint = Number.parseInt(octal, 8);
     }
     if (isUnstableCodePoint(codePoint)) {
       return true;
@@ -251,7 +275,9 @@ function hasInertLiteralWhitespace(source) {
  * targeting one of those code points cannot behave as written against
  * normalized input, so configuration rejects it rather than compiling a
  * silently inert rule. Escape scanning respects backslash parity, so an
- * escaped backslash followed by `u200B` text stays stable.
+ * escaped backslash followed by `u200B` text stays stable. Numeric
+ * backreferences `\1`-`\9` are intentionally not analysed because they are
+ * ambiguous with legacy octal escapes.
  *
  * This check is conservative: it does not prove that a source can match, and
  * arbitrary regex semantics are not fully analysed.

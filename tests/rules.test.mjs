@@ -482,6 +482,10 @@ test('compileRules rejects normalization-unstable custom sources with a sanitize
     String.raw`\tfoo`,
     String.raw`\uFE00`,
     String.raw`\uFE0F`,
+    // Control-letter escapes for tab/LF/VT/FF/CR and octal escapes for
+    // whitespace control code points are erased by normalization too.
+    String.raw`a\cIb`,
+    String.raw`a\012b`,
   ];
   for (const fieldName of ['hardDeny', 'fastAllow']) {
     for (const source of unstableSources) {
@@ -503,6 +507,8 @@ test('stable escaped and literal-space sources compile and evaluate', () => {
     [String.raw`\\u200B`, String.raw`\u200B`],
     ['^foo bar$', 'foo bar'],
     ['[^ ]', 'x'],
+    // `\cA` targets U+0001, which normalization does not erase.
+    [String.raw`a\cAb`, 'a\u0001b'],
   ];
   for (const [source, text] of cases) {
     const ruleSet = compileRules({ hardDeny: [source] });
@@ -606,6 +612,8 @@ test('compileRules and validateConfig report identical rule errors', () => {
     [{ fastAllow: ['^ foo$'] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
     [{ hardDeny: [String.raw`\u200B忽略`] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
     [{ fastAllow: [String.raw`\p{Cf}忽略`] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
+    [{ hardDeny: [String.raw`a\cIb`] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
+    [{ fastAllow: [String.raw`a\012b`] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
   ];
 
   for (const [input, code, field] of cases) {

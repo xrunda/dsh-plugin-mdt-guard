@@ -24,15 +24,14 @@ import {
   RULE_REGEX_FLAGS,
   isBuiltInRuleSource,
   isNormalizationStableSource,
+  isWhitespaceOnlySource,
   stripFormatCharacters,
 } from './rule-defaults.js';
 
-// A full-string whitespace predicate equivalent to /^[\s\u0085]*$/.
-// String#trim() and \s alone miss U+0085 (NEL).
-const WHITESPACE_ONLY = /^[\s\u0085]*$/;
 // Collapse all whitespace, including U+0085 (NEL), to a single space. NEL is
-// matched explicitly because `\s` does not include it; this must stay in
-// parity with config.js's /^[\s\u0085]*$/ source predicate.
+// matched explicitly because `\s` does not include it. The whitespace-only
+// source predicate itself is shared with config.js via
+// `isWhitespaceOnlySource` so both entry points reject the same sources.
 const WHITESPACE_RUN = /[\s\u0085]+/g;
 
 function fail(code, field) {
@@ -101,7 +100,7 @@ function compileField(value, field, builtInRules, builtInSourceMetadata) {
   const compiled = [];
   for (const [index, source] of value.entries()) {
     const indexedField = `${field}[${index}]`;
-    if (WHITESPACE_ONLY.test(source)) {
+    if (isWhitespaceOnlySource(source)) {
       fail(CONFIG_FIELD_INVALID, indexedField);
     }
 

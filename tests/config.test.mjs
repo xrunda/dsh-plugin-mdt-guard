@@ -412,6 +412,10 @@ test('normalization-unstable sources are rejected with sanitized rule errors', (
     String.raw`\p{Cf}忽略`,
     String.raw`\tfoo`,
     String.raw`\uFE0F`,
+    // Control-letter escapes for tab/LF/VT/FF/CR and octal escapes for
+    // whitespace control code points are erased by normalization too.
+    String.raw`a\cIb`,
+    String.raw`a\012b`,
   ];
   for (const fieldName of ['hardDeny', 'fastAllow']) {
     for (const source of unstableSources) {
@@ -426,7 +430,8 @@ test('normalization-unstable sources are rejected with sanitized rule errors', (
 });
 
 test('stable escaped and literal-space sources are accepted', () => {
-  const sources = ['a', String.raw`\\u200B`, '^foo bar$'];
+  // `\cA` targets U+0001, which normalization does not erase.
+  const sources = ['a', String.raw`\\u200B`, '^foo bar$', String.raw`a\cAb`];
   const result = validateConfig({ enabled: false, hardDeny: sources });
   assert.deepEqual(result.hardDeny, sources);
 

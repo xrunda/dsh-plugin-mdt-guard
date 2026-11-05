@@ -18,6 +18,7 @@ import {
   RULE_REGEX_FLAGS,
   isBuiltInRuleSource,
   isNormalizationStableSource,
+  isWhitespaceOnlySource,
 } from './rule-defaults.js';
 
 const REFUSAL_TEXT =
@@ -160,19 +161,20 @@ function requireStringArray(value, field) {
 /**
  * Validate a regular-expression source array. Shape errors keep the existing
  * `CONFIG_FIELD_INVALID` contract. Empty or whitespace-only sources are
- * rejected as `CONFIG_FIELD_INVALID` before compilation using a full-string
- * predicate equivalent to /^[\s\u0085]*$/; `String#trim()` and `\s` alone
- * miss U+0085 (NEL). An empty `fastAllow` source matches every message and
- * fails open. An empty `hardDeny` source matches every message and denies
- * everything, which is a fail-closed availability loss rather than
- * fail-open. Whitespace-only sources are meaningless and can match most
- * normalized multi-word messages. A custom source that message normalization
- * would erase or fold is rejected as `CONFIG_RULE_UNSTABLE` at the indexed
- * field: literal Cf format characters, variation selectors (U+FE00-U+FE0F),
- * other inert literal whitespace, and regex escapes targeting such characters
- * cannot behave as written. The stability check is conservative and does not
- * fully analyse arbitrary regex semantics; a single internal literal space
- * remains permitted. Exact built-in sources are exempt because some
+ * rejected as `CONFIG_FIELD_INVALID` before compilation via the shared
+ * `isWhitespaceOnlySource` predicate, which includes U+0085 (NEL) because
+ * `String#trim()` and `\s` alone miss it. An empty `fastAllow` source matches
+ * every message and fails open. An empty `hardDeny` source matches every
+ * message and denies everything, which is a fail-closed availability loss
+ * rather than fail-open. Whitespace-only sources are meaningless and can match
+ * most normalized multi-word messages. A custom source that message
+ * normalization would erase or fold is rejected as `CONFIG_RULE_UNSTABLE` at
+ * the indexed field: literal Cf format characters, variation selectors
+ * (U+FE00-U+FE0F), other inert literal whitespace, and regex escapes targeting
+ * such characters, including control-letter (`\cI`) and octal (`\012`)
+ * escapes, cannot behave as written. The stability check is conservative and
+ * does not fully analyse arbitrary regex semantics; a single internal literal
+ * space remains permitted. Exact built-in sources are exempt because some
  * legitimately contain full-width punctuation. A non-empty source that does
  * not compile raises `CONFIG_RULE_INVALID` for the indexed field only; no
  * source text is ever attached to the message.
@@ -181,7 +183,7 @@ function requireRegexArray(value, field) {
   requireStringArray(value, field);
   for (const [index, source] of value.entries()) {
     const indexedField = `${field}[${index}]`;
-    if (/^[\s\u0085]*$/.test(source)) {
+    if (isWhitespaceOnlySource(source)) {
       fail(CONFIG_FIELD_INVALID, indexedField);
     }
     if (!isBuiltInRuleSource(source) && !isNormalizationStableSource(source)) {
