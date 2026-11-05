@@ -140,20 +140,25 @@ function requireStringArray(value, field) {
 /**
  * Validate a regular-expression source array. Shape errors keep the existing
  * `CONFIG_FIELD_INVALID` contract. Empty or whitespace-only sources are
- * rejected as `CONFIG_FIELD_INVALID` before compilation: an empty source
- * matches every message, and a whitespace-only source is meaningless and
- * matches most normalized multi-word messages, so both would fail open.
- * Sources made only of zero-width characters are not rejected, but evaluation
- * strips zero-width characters from normalized text, so they can never match
- * and are inert rather than fail-open. A non-empty source that does not
- * compile raises `CONFIG_RULE_INVALID` for the indexed field only; no source
- * text is ever attached to the message.
+ * rejected as `CONFIG_FIELD_INVALID` before compilation using a full-string
+ * predicate equivalent to /^[\s\u0085]*$/; `String#trim()` and `\s` alone
+ * miss U+0085 (NEL). An empty `fastAllow` source matches every message and
+ * fails open. An empty `hardDeny` source matches every message and denies
+ * everything, which is a fail-closed availability loss rather than
+ * fail-open. Whitespace-only sources are meaningless and can match most
+ * normalized multi-word messages. Zero-width accuracy: sources made only of
+ * characters stripped by evaluation normalization (U+200B-U+200D, U+FEFF)
+ * are inert; U+FEFF is rejected here as whitespace; other zero-width
+ * characters (for example U+200E, U+2060, U+00AD) are neither stripped nor
+ * rejected. A non-empty source that does not compile raises
+ * `CONFIG_RULE_INVALID` for the indexed field only; no source text is ever
+ * attached to the message.
  */
 function requireRegexArray(value, field) {
   requireStringArray(value, field);
   for (const [index, source] of value.entries()) {
     const indexedField = `${field}[${index}]`;
-    if (source.trim().length === 0) {
+    if (/^[\s\u0085]*$/.test(source)) {
       fail(CONFIG_FIELD_INVALID, indexedField);
     }
     try {

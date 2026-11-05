@@ -53,7 +53,7 @@ as follows:
 | `[]` | built-in sources |
 | non-empty string array | the supplied sources, returned verbatim (no trimming or rewriting) |
 | non-array, sparse array, or non-string item | `CONFIG_FIELD_INVALID` at the array field (`hardDeny` / `fastAllow`) |
-| array containing an empty or whitespace-only source | `CONFIG_FIELD_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
+| array containing an empty or whitespace-only source (including U+0085 NEL) | `CONFIG_FIELD_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
 | array containing a source with invalid regex syntax | `CONFIG_RULE_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
 
 The built-in catalogs are defined once in `rule-defaults.js` and shared by
@@ -122,13 +122,16 @@ export function evaluateRules(ruleSet, text) -> {
 
 - Empty or whitespace-only sources are rejected before compilation as
   `CONFIG_FIELD_INVALID` with the indexed field (`hardDeny[<index>]` or
-  `fastAllow[<index>]`). An empty source matches every message, while a
-  whitespace-only source is meaningless and matches most normalized
-  multi-word messages; both are fail-open configuration errors, so they are
-  reported as field problems rather than invalid regexes. Sources made only
-  of zero-width characters are not rejected: evaluation strips zero-width
-  characters from normalized text, so such a source can never match and is
-  inert rather than fail-open.
+  `fastAllow[<index>]`), using a full-string predicate equivalent to
+  `/^[\s\u0085]*$/` because `String#trim()` and `\s` alone miss U+0085 (NEL).
+  Failure modes differ by field: an empty `fastAllow` source matches every
+  message and fails open; an empty `hardDeny` source matches every message and
+  denies everything, which is a fail-closed availability loss rather than
+  fail-open. Whitespace-only sources are meaningless and can match most
+  normalized multi-word messages. Zero-width accuracy: sources made only of
+  characters stripped by evaluation normalization (U+200B–U+200D, U+FEFF) are
+  inert; U+FEFF is rejected here as whitespace; other zero-width characters
+  (for example U+200E, U+2060, U+00AD) are neither stripped nor rejected.
 - Only non-empty sources are compiled. A source with invalid syntax raises
   `CONFIG_RULE_INVALID` with the indexed field.
 - Message templates identify the field only. No pattern, input text, parser

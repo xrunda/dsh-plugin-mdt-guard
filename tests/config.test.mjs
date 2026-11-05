@@ -355,6 +355,34 @@ test('empty and whitespace-only rule sources are rejected before compilation', (
   }
 });
 
+test('NEL-only sources are rejected and zero-width-only sources are accepted', () => {
+  // `\s` and String#trim() both miss U+0085 (NEL), so the validator uses a
+  // Unicode-complete full-string whitespace predicate and rejects it.
+  assertConfigError(
+    { enabled: false, hardDeny: ['\u0085'] },
+    'CONFIG_FIELD_INVALID',
+    'hardDeny[0]',
+    { label: 'hardDeny NEL-only', forbidden: ['\u0085'] },
+  );
+
+  // U+200B is not whitespace, so a zero-width-only source is accepted and
+  // returned verbatim. Evaluation normalization strips it, so the rule is
+  // inert rather than fail-open.
+  const zeroWidthOnly = '\u200B';
+  assert.deepEqual(
+    validateConfig({ enabled: false, hardDeny: [zeroWidthOnly] }).hardDeny,
+    [zeroWidthOnly],
+  );
+
+  // U+FEFF (BOM) is whitespace, so a BOM-only source is rejected.
+  assertConfigError(
+    { enabled: false, hardDeny: ['\uFEFF'] },
+    'CONFIG_FIELD_INVALID',
+    'hardDeny[0]',
+    { label: 'hardDeny BOM-only', forbidden: ['\uFEFF'] },
+  );
+});
+
 test('meaningful surrounding whitespace in rule sources is preserved', () => {
   const result = validateConfig({
     enabled: false,
