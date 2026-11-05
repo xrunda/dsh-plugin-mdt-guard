@@ -154,7 +154,12 @@ export function evaluateRules(ruleSet, text) -> {
   newlines, NEL, leading/trailing spaces, runs of two or more spaces, or a
   space directly inside a leading `^` / trailing `$` anchor), and regex
   escapes targeting such code points (`\uXXXX`, `\u{...}`, `\xXX`, `\t`,
-  `\n`, `\r`, `\f`, `\v`, `\p{Cf}`, `\P{Cf}`, `\p{C}`, `\P{C}`). Escape
+  `\n`, `\r`, `\f`, `\v`, `\p{Cf}`, `\P{Cf}`, `\p{C}`, `\P{C}`).
+  Control-letter escapes such as `\cI` (tab) and `\cM` (CR) and octal
+  escapes such as `\012` (LF) and `\011` (tab) are mapped to their code
+  points and checked the same way (so `\cA` for U+0001 and `\00` for NUL
+  stay accepted); numeric backreferences `\1`-`\9` are intentionally not
+  analysed because they are ambiguous with legacy octal escapes. Escape
   scanning respects backslash parity, so `\\u200B` (an escaped backslash
   followed by the literal text `u200B`) stays stable. A single internal
   literal space between non-space characters is permitted because it is
