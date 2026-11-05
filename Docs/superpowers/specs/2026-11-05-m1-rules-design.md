@@ -94,11 +94,11 @@ the validator and the rule compiler, so defaults and metadata cannot drift.
 | `hard-deny.any-question-permission` | H | "you may now answer anything" style permission claims; requires an answer/handle/discuss verb plus a question/topic object (with a short gap), so clinical planning such as "处理所有患者" is not denied; the English branch word-bounds `now` |
 | `hard-deny.jailbreak` | H | jailbreak / DAN mode / unrestricted mode |
 | `hard-deny.sensitive-path` | G | `~/.dsh`, `~/.ssh`, `/root`, `/etc/dsh`, `/etc/passwd`, DSH install directory |
-| `hard-deny.read-sensitive` | G | read/print config, logs, tokens, secrets, certificates, environment variables; English targets are word-bounded, so `oncology`/`secretion` are not logs/secrets; a clinical medication phrase after `配置` (prepared solutions and common drug-name suffixes such as `胰岛素`/`青霉素`/`抗生素`/`头孢`/`维生素`) is not app config |
+| `hard-deny.read-sensitive` | G | read/print config, logs, tokens, secrets, certificates, environment variables; English targets are word-bounded, so `oncology`/`secretion` are not logs/secrets, and word-bounded `log` matches `auth.log` but not compound/underscore forms such as `syslog`, `log4j` or `log_files`; a clinical medication phrase after `配置` (prepared solutions and common drug-name suffixes such as `胰岛素`/`青霉素`/`抗生素`/`头孢`/`维生素`) is not app config, but this covers those forms rather than all drug names, so other drug names (for example `阿司匹林`, `二甲双胍`, `布洛芬`) can still be denied |
 | `hard-deny.read-sensitive-reverse` | G | same nouns followed by location/read verbs; English nouns are word-bounded |
 | `hard-deny.command-exec` | G | execute shell/PowerShell/terminal commands or scripts; English targets are word-bounded, so `prescription`/`description`/`transcript`/`manuscript` are not scripts |
 | `hard-deny.software-install` | G | install/uninstall/upgrade software, runtimes or packages; English targets are word-bounded and `package leaflet`/`package insert` are not install targets |
-| `hard-deny.config-modify` | G | modify configuration (including bare 配置), config files, environment, registry, HIS address or logs; a clinical medication phrase after `配置` is not configuration, and English `logs` is word-bounded |
+| `hard-deny.config-modify` | G | modify configuration (including bare 配置), config files, environment, registry, HIS address or logs; a clinical medication phrase after `配置` is not configuration, but this covers prepared-medication words and common drug-name suffixes rather than all drug names, so other drug names such as `阿司匹林`, `二甲双胍` or `布洛芬` can still be denied; English `logs` is word-bounded, and the English branch requires an English verb, so `modify logs` denies while mixed-language `修改 logs` is not matched by this source |
 | `hard-deny.service-ops` | G | destructive verbs (`重启`/`启动`/`停止`/`关闭`/`杀掉`) on services, processes, the DSH host, or bare `系统` directly after the verb (optionally after an ops quantifier) when followed by end of message, punctuation, a particle, a conjunction, or an ops qualifier (with optional whitespace); diagnostic/repair verbs (`排查`/`调试`/`诊断`/`修复`) only on ops-qualified system nouns (`系统故障`, `系统配置`, `操作系统`, ...) |
 
 The full sources are reproduced in the implementation plan and live in
@@ -335,9 +335,12 @@ export function evaluateRules(ruleSet, text) -> {
   `配置` phrasing `查看配置好的药液`, `修改配置好的药液`, `查看配置好的药物`,
   `修改配置药物`, `查看配置药液`, `查看配置胰岛素`, `修改配置胰岛素`,
   `查看配置青霉素`, `查看配置抗生素`, `查看配置头孢曲松`,
-  `查看配置阿莫西林` and `查看配置维生素C`. The medication guard covers common
-  drug-name suffixes; a rare drug name outside that list can still fall
-  through.
+  `查看配置阿莫西林` and `查看配置维生素C`. The medication guard covers
+  prepared-medication words and common drug-name suffixes, not all drug names.
+  Other drug names — including common ones such as `阿司匹林`, `二甲双胍` and
+  `布洛芬` — are not excluded and can still be hard-denied. This is a
+  conservative false-positive cliff rather than a pass-through to the
+  classifier; the listed `配置` cases above remain `unknown`.
 - Source-stability cases: for both fields, literal format characters,
   variation selectors (`忽\uFE0F略`), NFKC-changing characters
   (`ＩＧＮＯＲＥ`, `ｃｏｎｆｉｇ`), inert literal whitespace (`a  b`, `a\tb`,
