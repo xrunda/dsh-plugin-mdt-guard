@@ -57,7 +57,12 @@ test('package manifest defines the private ESM bundle contract', async () => {
   }
 
   assert.equal(manifest.exports?.['./config'], './config.js');
-  assert.ok(files.includes('config.js'), 'files must include config.js');
+  assert.equal(manifest.exports?.['./rules'], './rules.js');
+  // rule-defaults.js is a transitive import of both config.js and rules.js,
+  // so it must ship.
+  for (const requiredPath of ['config.js', 'rules.js', 'rule-defaults.js']) {
+    assert.ok(files.includes(requiredPath), `files must include ${requiredPath}`);
+  }
   for (const entry of files) {
     // Normalize leading slash forms ("./" and bare "/", including
     // duplicates) so entries like "./Docs" or "//tests/foo" cannot slip into
@@ -68,6 +73,10 @@ test('package manifest defines the private ESM bundle contract', async () => {
       `files must not include ${entry}`,
     );
   }
+
+  const rules = await import('@local/dsh-mdt-guard/rules');
+  assert.equal(typeof rules.compileRules, 'function');
+  assert.equal(typeof rules.evaluateRules, 'function');
 });
 
 test('bundle patch registers one empty MDT guard plugin row', async () => {

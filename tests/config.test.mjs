@@ -5,6 +5,13 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { ConfigError, loadConfig, validateConfig } from '../config.js';
+import {
+  FAST_ALLOW_DEFAULT_SOURCES,
+  FAST_ALLOW_RULES,
+  HARD_DENY_DEFAULT_SOURCES,
+  HARD_DENY_RULES,
+  RULE_REGEX_FLAGS,
+} from '../rule-defaults.js';
 
 const refusalText =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
@@ -20,12 +27,17 @@ function assertConfigError(input, code, field, options = {}) {
     (error) => {
       assert.equal(error.name, 'ConfigError', `${label}: expected ConfigError`);
       assert.equal(error.code, code, `${label}: unexpected error code`);
+      assert.equal(error.field, field, `${label}: unexpected error field`);
       assert.ok(error.message.includes(field), `${label}: error message must identify ${field}`);
       assert.equal(error.cause, undefined, `${label}: ConfigError must not attach a cause`);
       for (const forbidden of options.forbidden ?? []) {
         assert.ok(
           !error.message.includes(forbidden),
           `${label}: error message must not include forbidden text`,
+        );
+        assert.ok(
+          !String(error).includes(forbidden),
+          `${label}: stringified error must not include forbidden text`,
         );
       }
       return true;
@@ -118,8 +130,8 @@ test('disabled configuration normalizes to the PRD defaults', () => {
     },
     contextTurns: 3,
     failOpen: true,
-    hardDeny: [],
-    fastAllow: [],
+    hardDeny: [...HARD_DENY_DEFAULT_SOURCES],
+    fastAllow: [...FAST_ALLOW_DEFAULT_SOURCES],
     refusalText,
     audit: {
       enabled: true,
@@ -226,10 +238,272 @@ test('each call returns fresh normalized objects rather than shared defaults', (
   first.tools.allow.push('mutated-tool');
   first.audit.retentionDays = 999;
 
-  assert.deepEqual(second.hardDeny, []);
-  assert.deepEqual(second.fastAllow, []);
+  assert.deepEqual(second.hardDeny, [...HARD_DENY_DEFAULT_SOURCES]);
+  assert.deepEqual(second.fastAllow, [...FAST_ALLOW_DEFAULT_SOURCES]);
   assert.deepEqual(second.tools.allow, []);
   assert.equal(second.audit.retentionDays, 30);
+});
+
+test('omitted and empty rule arrays use the built-in sources', () => {
+  const omitted = validateConfig({ enabled: false });
+  const empty = validateConfig({ enabled: false, hardDeny: [], fastAllow: [] });
+
+  assert.deepEqual(omitted.hardDeny, [...HARD_DENY_DEFAULT_SOURCES]);
+  assert.deepEqual(omitted.fastAllow, [...FAST_ALLOW_DEFAULT_SOURCES]);
+  assert.deepEqual(empty.hardDeny, omitted.hardDeny);
+  assert.deepEqual(empty.fastAllow, omitted.fastAllow);
+  assert.notEqual(empty.hardDeny, omitted.hardDeny);
+  assert.notEqual(empty.fastAllow, omitted.fastAllow);
+});
+
+test('non-empty rule arrays replace the built-in sources with fresh arrays', () => {
+  const hardDeny = ['^custom-deny$'];
+  const fastAllow = ['^custom-allow$'];
+  const result = validateConfig({ enabled: false, hardDeny, fastAllow });
+
+  assert.deepEqual(result.hardDeny, ['^custom-deny$']);
+  assert.deepEqual(result.fastAllow, ['^custom-allow$']);
+  assert.notEqual(result.hardDeny, hardDeny, 'hardDeny must be a fresh array');
+  assert.notEqual(result.fastAllow, fastAllow, 'fastAllow must be a fresh array');
+  assert.notEqual(
+    result.hardDeny,
+    HARD_DENY_DEFAULT_SOURCES,
+    'hardDeny must not reuse the default source array',
+  );
+  assert.notEqual(
+    result.fastAllow,
+    FAST_ALLOW_DEFAULT_SOURCES,
+    'fastAllow must not reuse the default source array',
+  );
+});
+
+test('built-in rule catalogs are complete, ordered, and compile with RULE_REGEX_FLAGS', () => {
+  const expectedHardDeny = [
+    ['hard-deny.prompt-injection', 'H'],
+    ['hard-deny.role-switch', 'H'],
+    ['hard-deny.system-prompt-exfiltration', 'H'],
+    ['hard-deny.any-question-permission', 'H'],
+    ['hard-deny.jailbreak', 'H'],
+    ['hard-deny.sensitive-path', 'G'],
+    ['hard-deny.read-sensitive', 'G'],
+    ['hard-deny.read-sensitive-reverse', 'G'],
+    ['hard-deny.command-exec', 'G'],
+    ['hard-deny.software-install', 'G'],
+    ['hard-deny.config-modify', 'G'],
+    ['hard-deny.service-ops', 'G'],
+  ];
+  // The five `fast-allow.software-help` rows intentionally share one ID: each
+  // row covers a different phrasing family while keeping a single audit
+  // identity.
+  const expectedFastAllow = [
+    ['fast-allow.greeting', 'D'],
+    ['fast-allow.continuation', 'D'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+    ['fast-allow.software-help', 'C'],
+  ];
+
+  for (const [label, rules, expected] of [
+    ['HARD_DENY_RULES', HARD_DENY_RULES, expectedHardDeny],
+    ['FAST_ALLOW_RULES', FAST_ALLOW_RULES, expectedFastAllow],
+  ]) {
+    assert.ok(Object.isFrozen(rules), `${label} must be frozen`);
+    // The exact deepEqual below already proves the array is non-empty.
+    assert.deepEqual(
+      rules.map((rule) => [rule.id, rule.category]),
+      expected,
+      `${label} ids and categories must match the documented order`,
+    );
+    for (const rule of rules) {
+      assert.ok(Object.isFrozen(rule), `${rule.id}: rule object must be frozen`);
+      assert.equal(typeof rule.source, 'string', `${rule.id}: source must be a string`);
+      assert.doesNotThrow(
+        () => RegExp(rule.source, RULE_REGEX_FLAGS),
+        `${rule.id}: source must compile with RULE_REGEX_FLAGS`,
+      );
+    }
+  }
+
+  assert.ok(
+    Object.isFrozen(HARD_DENY_DEFAULT_SOURCES),
+    'HARD_DENY_DEFAULT_SOURCES must be frozen',
+  );
+  assert.ok(
+    Object.isFrozen(FAST_ALLOW_DEFAULT_SOURCES),
+    'FAST_ALLOW_DEFAULT_SOURCES must be frozen',
+  );
+});
+
+test('empty and whitespace-only rule sources are rejected before compilation', () => {
+  // Both rule fields reject every empty/whitespace-only source. An empty
+  // string is never used in `forbidden`: String#includes('') is always true.
+  for (const fieldName of ['hardDeny', 'fastAllow']) {
+    for (const source of ['', '   ', '　', '\t\n']) {
+      const field = `${fieldName}[0]`;
+      assertConfigError(
+        { enabled: false, [fieldName]: [source] },
+        'CONFIG_FIELD_INVALID',
+        field,
+        {
+          label: `${field}: ${JSON.stringify(source)}`,
+          forbidden: source === '' ? [] : [source],
+        },
+      );
+    }
+  }
+});
+
+test('NEL-only sources are whitespace-rejected and format-character-only sources are rule-rejected', () => {
+  // `\s` and String#trim() both miss U+0085 (NEL), so the validator uses a
+  // Unicode-complete full-string whitespace predicate and rejects it.
+  assertConfigError(
+    { enabled: false, hardDeny: ['\u0085'] },
+    'CONFIG_FIELD_INVALID',
+    'hardDeny[0]',
+    { label: 'hardDeny NEL-only', forbidden: ['\u0085'] },
+  );
+
+  // U+200B is not whitespace but is a Unicode Cf format character erased by
+  // evaluation normalization, so a format-character-only source would be
+  // silently inert. It is rejected at the indexed field as
+  // CONFIG_RULE_UNSTABLE.
+  assertConfigError(
+    { enabled: false, hardDeny: ['\u200B'] },
+    'CONFIG_RULE_UNSTABLE',
+    'hardDeny[0]',
+    { label: 'hardDeny U+200B-only', forbidden: ['\u200B'] },
+  );
+
+  // U+FEFF (BOM) is whitespace, so a BOM-only source is rejected earlier as
+  // CONFIG_FIELD_INVALID.
+  assertConfigError(
+    { enabled: false, hardDeny: ['\uFEFF'] },
+    'CONFIG_FIELD_INVALID',
+    'hardDeny[0]',
+    { label: 'hardDeny BOM-only', forbidden: ['\uFEFF'] },
+  );
+});
+
+test('normalization-unstable sources are rejected with sanitized rule errors', () => {
+  // Literal Cf characters, variation selectors, characters NFKC would fold,
+  // inert literal whitespace and escapes targeting such characters can never
+  // behave as written against normalized input. Both fields reject them with
+  // CONFIG_RULE_UNSTABLE, and the source text never appears in the error.
+  const unstableSources = [
+    '\u200B忽略',
+    '忽\u00AD略',
+    '忽\uFE0F略',
+    '忽\uFE00略',
+    '\uFE00',
+    'ＩＧＮＯＲＥ',
+    'ｃｏｎｆｉｇ',
+    'a  b',
+    'a\tb',
+    'a\nb',
+    `a${String.fromCharCode(0x85)}b`,
+    ' foo',
+    'foo ',
+    '^ foo$',
+    String.raw`\u200B忽略`,
+    String.raw`\xAD忽略`,
+    String.raw`\uFF21`,
+    String.raw`\p{Cf}忽略`,
+    String.raw`\tfoo`,
+    String.raw`\uFE0F`,
+    // Control-letter escapes for tab/LF/VT/FF/CR and octal escapes for
+    // whitespace control code points are erased by normalization too.
+    String.raw`a\cIb`,
+    String.raw`a\012b`,
+  ];
+  for (const fieldName of ['hardDeny', 'fastAllow']) {
+    for (const source of unstableSources) {
+      assertConfigError(
+        { enabled: false, [fieldName]: [source] },
+        'CONFIG_RULE_UNSTABLE',
+        `${fieldName}[0]`,
+        { label: `${fieldName}: unstable source`, forbidden: [source] },
+      );
+    }
+  }
+});
+
+test('stable escaped and literal-space sources are accepted', () => {
+  // `\cA` targets U+0001, which normalization does not erase.
+  const sources = ['a', String.raw`\\u200B`, '^foo bar$', String.raw`a\cAb`];
+  const result = validateConfig({ enabled: false, hardDeny: sources });
+  assert.deepEqual(result.hardDeny, sources);
+
+  // The built-in greeting keeps its full-width punctuation through the
+  // built-in exemption.
+  const greeting = FAST_ALLOW_DEFAULT_SOURCES[0];
+  const exempt = validateConfig({ enabled: false, fastAllow: [greeting] });
+  assert.deepEqual(exempt.fastAllow, [greeting]);
+});
+
+test('an exact built-in source with full-width punctuation is still accepted verbatim', () => {
+  // The greeting source legitimately contains full-width punctuation that
+  // NFKC would fold, so exact built-in sources are exempt from the stability
+  // check and are returned verbatim.
+  const greeting = FAST_ALLOW_DEFAULT_SOURCES[0];
+  const result = validateConfig({ enabled: false, fastAllow: [greeting] });
+
+  assert.deepEqual(result.fastAllow, [greeting]);
+});
+
+test('single internal literal spaces are preserved but inert whitespace is rejected', () => {
+  const accepted = validateConfig({ enabled: false, hardDeny: ['^foo bar$'] });
+  assert.deepEqual(accepted.hardDeny, ['^foo bar$']);
+
+  const inertWhitespace = [
+    ' foo',
+    'foo ',
+    'a  b',
+    'a\tb',
+    'a\nb',
+    `a${String.fromCharCode(0x85)}b`,
+    '^ foo$',
+  ];
+  for (const fieldName of ['hardDeny', 'fastAllow']) {
+    for (const source of inertWhitespace) {
+      assertConfigError(
+        { enabled: false, [fieldName]: [source] },
+        'CONFIG_RULE_UNSTABLE',
+        `${fieldName}[0]`,
+        { label: `${fieldName}: ${JSON.stringify(source)}`, forbidden: [source] },
+      );
+    }
+  }
+});
+
+test('sparse rule arrays are rejected as CONFIG_FIELD_INVALID', () => {
+  assertConfigError(
+    withField(['hardDeny'], [, 'x']),
+    'CONFIG_FIELD_INVALID',
+    'hardDeny',
+    { label: 'hardDeny sparse' },
+  );
+  assertConfigError(
+    withField(['fastAllow'], [, 'x']),
+    'CONFIG_FIELD_INVALID',
+    'fastAllow',
+    { label: 'fastAllow sparse' },
+  );
+});
+
+test('invalid rule regular expressions raise a sanitized CONFIG_RULE_INVALID error', () => {
+  for (const [field, input, forbidden] of [
+    ['hardDeny[0]', { hardDeny: ['(unclosed'] }, '(unclosed'],
+    ['fastAllow[1]', { fastAllow: ['^ok$', '[z-a]'] }, '[z-a]'],
+  ]) {
+    assertConfigError(
+      { enabled: false, ...input },
+      'CONFIG_RULE_INVALID',
+      field,
+      { label: field, forbidden: [forbidden] },
+    );
+  }
 });
 
 test('enabled configuration requires classifier.baseUrl and classifier.model', () => {
@@ -384,8 +658,8 @@ test('loadConfig resolves the default config path from the isolated home', async
     },
     contextTurns: 7,
     failOpen: true,
-    hardDeny: [],
-    fastAllow: [],
+    hardDeny: [...HARD_DENY_DEFAULT_SOURCES],
+    fastAllow: [...FAST_ALLOW_DEFAULT_SOURCES],
     refusalText,
     audit: {
       enabled: true,
@@ -508,8 +782,8 @@ test('loadConfig accepts a disabled config without classifier connection fields'
     },
     contextTurns: 3,
     failOpen: true,
-    hardDeny: [],
-    fastAllow: [],
+    hardDeny: [...HARD_DENY_DEFAULT_SOURCES],
+    fastAllow: [...FAST_ALLOW_DEFAULT_SOURCES],
     refusalText,
     audit: {
       enabled: true,

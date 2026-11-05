@@ -12,6 +12,15 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import {
+  FAST_ALLOW_DEFAULT_SOURCES,
+  HARD_DENY_DEFAULT_SOURCES,
+  RULE_REGEX_FLAGS,
+  isBuiltInRuleSource,
+  isNormalizationStableSource,
+  isWhitespaceOnlySource,
+} from './rule-defaults.js';
+
 const REFUSAL_TEXT =
   '本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。';
 
@@ -63,11 +72,13 @@ const INTEGER_BOUNDS = {
   'audit.retentionDays': [1, 3650],
 };
 
-const CONFIG_FIELD_REQUIRED = 'CONFIG_FIELD_REQUIRED';
-const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
-const CONFIG_UNKNOWN_FIELD = 'CONFIG_UNKNOWN_FIELD';
-const CONFIG_JSON_INVALID = 'CONFIG_JSON_INVALID';
-const CONFIG_READ_FAILED = 'CONFIG_READ_FAILED';
+export const CONFIG_FIELD_REQUIRED = 'CONFIG_FIELD_REQUIRED';
+export const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
+export const CONFIG_UNKNOWN_FIELD = 'CONFIG_UNKNOWN_FIELD';
+export const CONFIG_JSON_INVALID = 'CONFIG_JSON_INVALID';
+export const CONFIG_READ_FAILED = 'CONFIG_READ_FAILED';
+export const CONFIG_RULE_INVALID = 'CONFIG_RULE_INVALID';
+export const CONFIG_RULE_UNSTABLE = 'CONFIG_RULE_UNSTABLE';
 
 /**
  * Sanitized configuration error. Messages are built only from fixed templates
@@ -89,11 +100,29 @@ const ERROR_TEMPLATES = {
   [CONFIG_FIELD_REQUIRED]: 'Missing required configuration field',
   [CONFIG_FIELD_INVALID]: 'Invalid configuration field',
   [CONFIG_UNKNOWN_FIELD]: 'Unknown configuration field',
+  [CONFIG_RULE_INVALID]: 'Invalid regular expression in configuration field',
+  [CONFIG_RULE_UNSTABLE]:
+    'Rule regular expression is incompatible with message normalization',
 };
 
+/**
+ * Build a sanitized configuration error from a fixed template and a field
+ * path.
+ *
+ * The supplied value, regular-expression source, parser detail and any
+ * underlying cause are never attached.
+ *
+ * @param {string} code
+ * @param {string} field
+ * @returns {ConfigError}
+ */
+export function createConfigError(code, field) {
+  const template = ERROR_TEMPLATES[code] ?? ERROR_TEMPLATES[CONFIG_FIELD_INVALID];
+  return new ConfigError(code, field, `${template} "${field}"`);
+}
+
 function fail(code, field) {
-  const template = ERROR_TEMPLATES[code] ?? 'Invalid configuration field';
-  throw new ConfigError(code, field, `${template} "${field}"`);
+  throw createConfigError(code, field);
 }
 
 function isPlainObject(value) {
@@ -125,6 +154,54 @@ function requireStringArray(value, field) {
   for (const item of value) {
     if (typeof item !== 'string') {
       fail(CONFIG_FIELD_INVALID, field);
+    }
+  }
+}
+
+/**
+ * Validate a regular-expression source array.
+ *
+ * Shared by `validateConfig` and `compileRules` so both entry points enforce
+ * exactly the same shape, whitespace, normalization-stability and regex
+ * contract. Shape errors keep the existing
+ * `CONFIG_FIELD_INVALID` contract. Empty or whitespace-only sources are
+ * rejected as `CONFIG_FIELD_INVALID` before compilation via the shared
+ * `isWhitespaceOnlySource` predicate, which includes U+0085 (NEL) because
+ * `String#trim()` and `\s` alone miss it. An empty `fastAllow` source matches
+ * every message and fails open. An empty `hardDeny` source matches every
+ * message and denies everything, which is a fail-closed availability loss
+ * rather than fail-open. Whitespace-only sources are meaningless and can match
+ * most normalized multi-word messages. A custom source that message
+ * normalization would erase or fold is rejected as `CONFIG_RULE_UNSTABLE` at
+ * the indexed field: literal Cf format characters, variation selectors
+ * (U+FE00-U+FE0F), other inert literal whitespace, and regex escapes targeting
+ * such characters, including control-letter (`\cI`) and octal (`\012`)
+ * escapes, cannot behave as written. The stability check is conservative and
+ * does not fully analyse arbitrary regex semantics; a single internal literal
+ * space remains permitted. Exact built-in sources from the field's own catalog
+ * are exempt because some legitimately contain full-width punctuation; an
+ * exact source from the other catalog is treated as custom. A non-empty source
+ * that does not compile raises `CONFIG_RULE_INVALID` for the indexed field
+ * only; no source text is ever attached to the message.
+ *
+ * @param {unknown} value
+ * @param {'hardDeny'|'fastAllow'} field
+ * @throws {ConfigError}
+ */
+export function validateRuleSourceArray(value, field) {
+  requireStringArray(value, field);
+  for (const [index, source] of value.entries()) {
+    const indexedField = `${field}[${index}]`;
+    if (isWhitespaceOnlySource(source)) {
+      fail(CONFIG_FIELD_INVALID, indexedField);
+    }
+    if (!isBuiltInRuleSource(source, field) && !isNormalizationStableSource(source)) {
+      fail(CONFIG_RULE_UNSTABLE, indexedField);
+    }
+    try {
+      RegExp(source, RULE_REGEX_FLAGS);
+    } catch {
+      fail(CONFIG_RULE_INVALID, indexedField);
     }
   }
 }
@@ -213,16 +290,23 @@ export function validateConfig(input) {
     refusalText = input.refusalText;
   }
 
-  let hardDeny = [];
+  // The built-in rule lists are the fail-safe default. An empty supplied
+  // array keeps them so hard-deny cannot be silently disabled; a non-empty
+  // array replaces the whole list. Each result is a fresh array.
+  let hardDeny = [...HARD_DENY_DEFAULT_SOURCES];
   if (input.hardDeny !== undefined) {
-    requireStringArray(input.hardDeny, 'hardDeny');
-    hardDeny = [...input.hardDeny];
+    validateRuleSourceArray(input.hardDeny, 'hardDeny');
+    if (input.hardDeny.length > 0) {
+      hardDeny = [...input.hardDeny];
+    }
   }
 
-  let fastAllow = [];
+  let fastAllow = [...FAST_ALLOW_DEFAULT_SOURCES];
   if (input.fastAllow !== undefined) {
-    requireStringArray(input.fastAllow, 'fastAllow');
-    fastAllow = [...input.fastAllow];
+    validateRuleSourceArray(input.fastAllow, 'fastAllow');
+    if (input.fastAllow.length > 0) {
+      fastAllow = [...input.fastAllow];
+    }
   }
 
   const classifier = {
