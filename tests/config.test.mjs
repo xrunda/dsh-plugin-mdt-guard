@@ -615,4 +615,17 @@ test('the documented example is valid and contains no credentials', async () => 
   assert.match(normalized.classifier.baseUrl, /^https:\/\/classifier\.example\.invalid\//);
   assert.equal(Object.hasOwn(example.classifier, 'apiKey'), false);
   assert.equal(Object.hasOwn(normalized.classifier, 'apiKey'), false);
+
+  const defaults = validateConfig({ enabled: false });
+  assert.equal(normalized.classifier.timeoutMs, defaults.classifier.timeoutMs);
+  assert.equal(normalized.classifier.maxTokens, defaults.classifier.maxTokens);
+  assert.equal(normalized.contextTurns, defaults.contextTurns);
+  assert.equal(normalized.failOpen, defaults.failOpen);
+  assert.equal(normalized.refusalText, defaults.refusalText);
+  assert.equal(normalized.audit.enabled, defaults.audit.enabled);
+  assert.equal(normalized.audit.storeText, defaults.audit.storeText);
+  assert.equal(normalized.audit.retentionDays, defaults.audit.retentionDays);
+  assert.deepEqual(normalized.hardDeny, defaults.hardDeny);
+  assert.deepEqual(normalized.fastAllow, defaults.fastAllow);
+  assert.deepEqual(normalized.tools, defaults.tools);
 });
