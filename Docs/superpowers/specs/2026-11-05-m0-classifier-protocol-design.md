@@ -10,8 +10,12 @@ production classifier client and from hospital connectivity.
 ## Scope
 
 - Exercise an OpenAI-compatible `POST /v1/chat/completions` request and a
-  strict classifier JSON response against a local mock service.
-- Verify temperature/output-token request constraints, a 1500 ms end-to-end
+  strict classifier JSON response against a local mock service. The expected
+  classifier object is `{ "decision": "allow|deny|unknown", "category":
+  "A|B|C|D|E|F|G|H|I", "reason": "<string>", "confidence": 0..1 }`, carried
+  as JSON content in the OpenAI chat completion response.
+- Verify `temperature: 0` and `max_tokens: 200` request constraints, a 1500 ms
+end-to-end
   request timeout measured from dispatch until the complete response is
   received or the request aborts, and that timeout does not retry.
 - Verify default TLS certificate validation rejects an untrusted certificate,
@@ -50,8 +54,9 @@ conditions; they are not a production API contract for issue #8.
 - A local mock service returning controlled success, malformed, delayed, and
   TLS responses and counting received requests.
 - Tests covering request method/path/body, valid classifier response shape,
-  no retry after timeout, TLS trust and hostname rejection/acceptance, and
-  HTTPS through a local CONNECT proxy with asserted CONNECT authority.
+  `temperature: 0`, `max_tokens: 200`, no retry after timeout, TLS trust and
+  hostname rejection/acceptance, and HTTPS through a local CONNECT proxy with
+  asserted CONNECT authority.
 - An issue #2 report at `Docs/M0-classifier-protocol-validation.md` with
   runtime versions, exact command/results, configuration requirements for the
   hospital, and explicit limits of the test-only reference client.
@@ -62,9 +67,9 @@ conditions; they are not a production API contract for issue #8.
   self-signed certificate and proxy cases.
 - Start the end-to-end timer immediately before dispatch and stop only after
   the response is fully received or the request aborts. Use a response delayed
-  beyond 1500 ms, assert the request aborts within a documented CI-safe
-  tolerance, and confirm the mock observes exactly one request after the
-  delayed handler has completed.
+  to 2500 ms, assert abort elapsed time is between 1200 ms and 2500 ms
+  (tolerance around the 1500 ms policy), and confirm the mock observes exactly
+  one request after the delayed handler has completed.
 - Ensure untrusted CA and hostname mismatch both fail rather than falling back
   to insecure TLS; verify the matching hostname succeeds only with the
   explicitly configured test CA.
@@ -85,7 +90,8 @@ conditions; they are not a production API contract for issue #8.
   an actionable error if it is missing; do not silently skip TLS checks.
 - Certificate fixtures must distinguish the trusted test CA from a leaf
   certificate containing a `localhost` Subject Alternative Name; the
-  hostname-mismatch case must use a different host name.
+  hostname-mismatch case must use a leaf that lacks `localhost` in its SAN and
+  a different request host name.
 - Hospital-specific model, CA, proxy, and authentication values are unknown.
   Keep them as a checklist for the hospital and do not invent defaults beyond
   PRD FR-3.
