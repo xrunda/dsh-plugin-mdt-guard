@@ -68,7 +68,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.service-ops',
     category: 'G',
-    source: String.raw`(?:重启|启动|停止|关闭|杀掉).{0,8}(?:服务|进程|插件|dsh|系统(?!性)|主机|服务器|容器)|(?:排查|调试|诊断|修复).{0,8}(?:服务|进程|插件|dsh|主机|服务器|容器|操作系统|系统故障|系统异常|系统错误|系统服务|系统进程|系统配置|系统设置|系统日志|系统环境|系统文件|系统目录)|(?:restart|start|stop|kill|debug|diagnose|fix).{0,16}(?:service|process|plugin|dsh|server|container|host)`,
+    source: String.raw`(?:重启|启动|停止|关闭|杀掉).{0,8}(?:服务|进程|插件|dsh|系统(?=$|[\s!！。,.，?？;；:：、~～]|(?:并|后|再|然后|之后|服务|进程|配置|设置|日志|故障|异常|错误|文件|目录|环境))|主机|服务器|容器)|(?:排查|调试|诊断|修复).{0,8}(?:服务|进程|插件|dsh|主机|服务器|容器|操作系统|系统故障|系统异常|系统错误|系统服务|系统进程|系统配置|系统设置|系统日志|系统环境|系统文件|系统目录)|(?:restart|start|stop|kill|debug|diagnose|fix).{0,16}(?:service|process|plugin|dsh|server|container|host)`,
   }),
 ]);
 
