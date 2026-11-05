@@ -54,7 +54,9 @@ this issue.
 The default refusal text is: `本助手仅提供 MDT 多学科会诊相关支持，暂无法处理该请求。如需其他帮助，请联系信息科。`
 
 `hardDeny`, `fastAllow`, and tool arrays are structural placeholders in this
-issue, not active policy. Later issues supply concrete rules and tool names.
+issue, not active policy or the final PRD built-in defaults. Issue #5 supplies
+the concrete rule defaults, and issue #12 supplies tool names; consumers must
+not treat these empty arrays as the final enforcement policy.
 
 ## Error Handling and Secret Safety
 
@@ -63,8 +65,9 @@ issue, not active policy. Later issues supply concrete rules and tool names.
   required fields raise `ConfigError` with a stable code and field-oriented
   message.
 - Error messages may identify the config path and field name, but never embed
-  the value, raw JSON, parser detail, or `apiKey`. The loader does not log
-  config contents or create directories/files.
+  the value, raw JSON, parser detail, or `apiKey`. Do not retain raw parser or
+  filesystem exceptions as a `cause`, because they may contain sensitive
+  input. The loader does not log config contents or create directories/files.
 - Configuration errors are surfaced to the caller; this module does not add a
   logger. The future runtime integration must report them safely and keep the
   guard inactive so DSH retains its default behavior.
@@ -85,7 +88,9 @@ Use built-in `node:test` and temporary files/directories only. Tests cover:
 - Missing required fields, unknown fields, wrong types, malformed JSON, and
   all numeric lower/upper boundaries and out-of-range cases.
 - Safe errors: include useful field context while excluding sentinel API key
-  values and raw configuration text.
+  values and raw configuration text from error messages, stringification,
+  causes, and any logs. Exercise this with invalid field values, malformed
+  JSON containing a sentinel, and filesystem failures.
 - No modification of a real home directory and no config-file creation.
 
 The documented example contains no real endpoint or credential. Add the
