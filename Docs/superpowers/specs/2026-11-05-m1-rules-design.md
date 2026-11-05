@@ -24,8 +24,13 @@ This issue adds a pure rule module. It does not wire the rules into
   G/H hard-deny. Disabling the whole gate remains available through
   `enabled: false`.
 - Compile every source with the `i` flag only. Rules receive text normalized
-  with NFKC, `U+200B`–`U+200D` and `U+FEFF` removed, and whitespace (including
-  `U+0085` NEL) collapsed; the original message is never modified or retained.
+  with NFKC; every Unicode `Cf` format character and the variation selectors
+  `U+FE00`–`U+FE0F` are stripped (not only `U+200B`–`U+200D`/`U+FEFF`);
+  whitespace (including `U+0085` NEL) is collapsed and the text is trimmed.
+  Each message is evaluated against both a whitespace-collapsed variant and a
+  whitespace-free variant, because a single space preserves English word
+  patterns while removing it catches separators inserted inside a CJK token
+  (`打 印 config.json`). The original message is never modified or retained.
 - Evaluate all hard-deny rules before any fast-allow rule. A message matching
   both is denied.
 - A fast-allow match is a terminal "do not call the classifier" result. For
@@ -54,6 +59,7 @@ as follows:
 | non-empty string array | the supplied sources, returned verbatim (no trimming or rewriting) |
 | non-array, sparse array, or non-string item | `CONFIG_FIELD_INVALID` at the array field (`hardDeny` / `fastAllow`) |
 | array containing an empty or whitespace-only source (including U+0085 NEL) | `CONFIG_FIELD_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
+| array containing a normalization-unstable custom source (literal Cf character, variation selector, or text NFKC would change) | `CONFIG_RULE_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
 | array containing a source with invalid regex syntax | `CONFIG_RULE_INVALID` at the indexed field (`hardDeny[<index>]` / `fastAllow[<index>]`) |
 
 The built-in catalogs are defined once in `rule-defaults.js` and shared by
@@ -66,16 +72,16 @@ the validator and the rule compiler, so defaults and metadata cannot drift.
 | ID | Cat | Coverage |
 |---|---|---|
 | `hard-deny.prompt-injection` | H | ignore/forget/bypass prior instructions, rules or limits; English equivalents |
-| `hard-deny.role-switch` | H | role-play or "act as" another assistant/doctor/model |
+| `hard-deny.role-switch` | H | role-play, `切换`/`更换角色`, or "act as" another assistant/doctor/model; `作为…助手` is not a role switch |
 | `hard-deny.system-prompt-exfiltration` | H | reveal system prompt, internal rules or hidden instructions |
-| `hard-deny.any-question-permission` | H | "you may now answer anything" style permission claims |
+| `hard-deny.any-question-permission` | H | "you may now answer anything" style permission claims; requires an answer/discuss verb plus a question/topic object, so clinical planning such as "处理所有患者" is not denied |
 | `hard-deny.jailbreak` | H | jailbreak / DAN mode / unrestricted mode |
 | `hard-deny.sensitive-path` | G | `~/.dsh`, `~/.ssh`, `/root`, `/etc/dsh`, `/etc/passwd`, DSH install directory |
 | `hard-deny.read-sensitive` | G | read/print config, logs, tokens, secrets, certificates, environment variables |
 | `hard-deny.read-sensitive-reverse` | G | same nouns followed by location/read verbs |
 | `hard-deny.command-exec` | G | execute shell/PowerShell/terminal commands or scripts |
 | `hard-deny.software-install` | G | install/uninstall/upgrade software, runtimes or packages |
-| `hard-deny.config-modify` | G | modify config files, environment, registry, HIS address or logs |
+| `hard-deny.config-modify` | G | modify configuration (including bare 配置), config files, environment, registry, HIS address or logs |
 | `hard-deny.service-ops` | G | restart/stop/debug services, processes or the DSH host |
 
 The full sources are reproduced in the implementation plan and live in
@@ -94,7 +100,9 @@ as "修改治疗方案", "查看检查结果", "这个药怎么用" or "作为�
 Greetings and continuations are whole-message anchored so that
 "好的，我头疼吃什么药" is not fast-allowed. Software-help rules require a
 software noun near a question word so that "这个药怎么用" and
-"在哪里下载检查报告" are not fast-allowed.
+"在哪里下载检查报告" are not fast-allowed. `功能` and bare `系统` are not
+treated as software nouns because they are also core medical nouns
+("肝功能怎么检查", "这个系统的功能怎么评估").
 
 ## Module API
 
@@ -128,10 +136,14 @@ export function evaluateRules(ruleSet, text) -> {
   message and fails open; an empty `hardDeny` source matches every message and
   denies everything, which is a fail-closed availability loss rather than
   fail-open. Whitespace-only sources are meaningless and can match most
-  normalized multi-word messages. Zero-width accuracy: sources made only of
-  characters stripped by evaluation normalization (U+200B–U+200D, U+FEFF) are
-  inert; U+FEFF is rejected here as whitespace; other zero-width characters
-  (for example U+200E, U+2060, U+00AD) are neither stripped nor rejected.
+  normalized multi-word messages.
+- A custom source that evaluation normalization would erase or fold is
+  rejected so an administrator's hard-deny rule cannot be silently inert.
+  Literal Unicode `Cf` format characters, variation selectors
+  (`U+FE00`–`U+FE0F`), and any literal that NFKC would change raise
+  `CONFIG_RULE_INVALID` at the indexed field. Exact built-in sources are
+  exempt because some legitimately contain full-width punctuation; built-ins
+  are not affected by this validation.
 - Only non-empty sources are compiled. A source with invalid syntax raises
   `CONFIG_RULE_INVALID` with the indexed field.
 - Message templates identify the field only. No pattern, input text, parser
@@ -146,11 +158,19 @@ export function evaluateRules(ruleSet, text) -> {
 
 - Table-driven hard-deny cases for every built-in rule, using PRD examples
   plus case, full-width, zero-width and whitespace (including U+0085 NEL)
-  variants.
+  variants. Normalization variants include whitespace inside a CJK token
+  (`打 印 config.json`, `打\n印 config.json`, `忽 略以上指令`), soft hyphen,
+  LRM, word joiner and a variation selector.
 - Table-driven fast-allow cases for greetings, continuations and software
   help, including whole-message anchoring.
 - Negative cases proving benign MDT/medical phrasing falls through to
-  `unknown` (classifier path).
+  `unknown` (classifier path), including clinical planning
+  ("现在可以处理所有患者吗"), `作为…助手` phrasing, English "you are now"
+  non-role-switch phrasing, and medical `功能`/`系统` questions.
+- Source-stability cases: normalization-unstable custom sources are rejected
+  with a sanitized `CONFIG_RULE_INVALID` for both fields, while an exact
+  built-in source (including the full-width-punctuation greeting) still
+  compiles with its catalog identity.
 - Priority test: a message matching both a hard-deny and fast-allow rule is
   denied; the hard-deny rule ID is returned.
 - Override tests: omitted and empty arrays use built-ins; a non-empty custom
