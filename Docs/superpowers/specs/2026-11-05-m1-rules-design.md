@@ -24,8 +24,8 @@ This issue adds a pure rule module. It does not wire the rules into
   G/H hard-deny. Disabling the whole gate remains available through
   `enabled: false`.
 - Compile every source with the `i` flag only. Rules receive text normalized
-  with NFKC, zero-width characters removed, and whitespace collapsed; the
-  original message is never modified or retained.
+  with NFKC, `U+200B`–`U+200D` and `U+FEFF` removed, and whitespace collapsed;
+  the original message is never modified or retained.
 - Evaluate all hard-deny rules before any fast-allow rule. A message matching
   both is denied.
 - A fast-allow match is a terminal "do not call the classifier" result. For
