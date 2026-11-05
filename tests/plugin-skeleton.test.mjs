@@ -63,8 +63,12 @@ test('bundle patch registers one empty MDT guard plugin row', async () => {
     .map((match) => match[1]);
 
   assert.deepEqual(ids, ['dsh-mdt-guard']);
-  assert.match(patch, /^\s+name:\s*['"]@local\/dsh-mdt-guard['"]\s*$/m);
-  assert.match(patch, /^\s+config:\s*\{\s*\}\s*$/m);
+  const rows = patch.split(/^(?=\s*-\s+id:)/m).filter((row) => /^\s*-\s+id:/.test(row));
+  assert.equal(rows.length, 1, 'patch must contain exactly one plugin row');
+  const [row] = rows;
+  assert.match(row, /^\s*-\s+id:\s*['"]?dsh-mdt-guard['"]?\s*$/m);
+  assert.match(row, /^\s+name:\s*['"]@local\/dsh-mdt-guard['"]\s*$/m);
+  assert.match(row, /^\s+config:\s*\{\s*\}\s*$/m);
 });
 
 test('localized metadata and package icon are present and local', async () => {
