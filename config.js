@@ -347,7 +347,7 @@ export async function loadConfig({ filePath } = {}) {
 
   // Tolerate a single UTF-8 BOM before the JSON document. Nothing else is
   // rewritten: whitespace and all remaining text reach JSON.parse unchanged.
-  const text = rawText.startsWith('﻿') ? rawText.slice(1) : rawText;
+  const text = rawText.startsWith('\uFEFF') ? rawText.slice(1) : rawText;
 
   let parsed;
   try {

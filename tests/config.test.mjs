@@ -434,7 +434,7 @@ test('loadConfig does not fall back to the default path for a null filePath', as
 test('loadConfig accepts a UTF-8 BOM before valid JSON', async (t) => {
   const dir = await makeTempDir(t);
   const filePath = join(dir, 'bom.json');
-  await writeFile(filePath, `﻿${JSON.stringify({ enabled: false })}`);
+  await writeFile(filePath, `\uFEFF${JSON.stringify({ enabled: false })}`);
 
   const config = await loadConfig({ filePath });
   assert.equal(config.enabled, false);
