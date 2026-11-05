@@ -19,6 +19,8 @@ function assertConfigError(input, code, field) {
   );
 }
 
+const readPath = (object, path) => path.reduce((value, key) => value[key], object);
+
 function withField(path, value) {
   const input = { enabled: false };
   let target = input;
@@ -52,6 +54,14 @@ test('disabled configuration normalizes to the PRD defaults', () => {
       deny: [],
     },
   });
+});
+
+test('supplied refusalText survives normalization unchanged', () => {
+  const customRefusalText = 'Custom refusal text.';
+  assert.equal(
+    validateConfig({ enabled: false, refusalText: customRefusalText }).refusalText,
+    customRefusalText,
+  );
 });
 
 test('enabled configuration merges nested defaults and replaces supplied arrays', () => {
@@ -207,6 +217,16 @@ test('classifier.baseUrl must be an absolute HTTP or HTTPS URL', () => {
       'classifier.baseUrl',
     );
   }
+
+  const baseUrl = 'http://classifier.example.test/model';
+  assert.equal(
+    validateConfig({
+      enabled: true,
+      classifier: { baseUrl, model: 'mdt-classifier' },
+    }).classifier.baseUrl,
+    baseUrl,
+    'absolute http URLs must be accepted and preserved',
+  );
 });
 
 test('accepts each numeric lower and upper bound and rejects values outside them', () => {
@@ -219,7 +239,11 @@ test('accepts each numeric lower and upper bound and rejects values outside them
 
   for (const [path, minimum, maximum] of bounds) {
     for (const value of [minimum, maximum]) {
-      assert.doesNotThrow(() => validateConfig(withField(path, value)), `${path.join('.')}=${value}`);
+      assert.equal(
+        readPath(validateConfig(withField(path, value)), path),
+        value,
+        `${path.join('.')}=${value} must be preserved`,
+      );
     }
     for (const value of [minimum - 1, maximum + 1]) {
       assertConfigError(
