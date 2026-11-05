@@ -100,15 +100,17 @@ test('localized metadata and package icon are present and local', async () => {
 test('plugin entry is callable and does not inspect context or config', async () => {
   const plugin = await import('../index.js');
   const accessedProperties = [];
-  const context = new Proxy({}, {
+  const createThrowingProxy = (name) => new Proxy({}, {
     get(_target, property) {
-      accessedProperties.push(property);
-      throw new Error(`unexpected context access: ${String(property)}`);
+      accessedProperties.push(`${name}.${String(property)}`);
+      throw new Error(`unexpected ${name} access: ${String(property)}`);
     },
   });
+  const context = createThrowingProxy('context');
+  const config = createThrowingProxy('config');
 
   assert.equal(typeof plugin.apply, 'function');
-  assert.equal(plugin.apply(context, {}), undefined);
+  assert.equal(plugin.apply(context, config), undefined);
   assert.deepEqual(accessedProperties, [], 'entry must not register host resources');
 });
 
