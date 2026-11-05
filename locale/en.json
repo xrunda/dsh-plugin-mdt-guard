@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MDT Topic Guard",
+    "description": "MDT topic-guard plugin package for the DSH host. This bundle contains display metadata only; enforcement is not implemented."
+  }
+}
