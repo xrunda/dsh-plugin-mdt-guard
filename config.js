@@ -16,6 +16,7 @@ import {
   FAST_ALLOW_DEFAULT_SOURCES,
   HARD_DENY_DEFAULT_SOURCES,
   RULE_REGEX_FLAGS,
+  isBuiltInRuleSource,
   isNormalizationStableSource,
 } from './rule-defaults.js';
 
@@ -71,19 +72,12 @@ const INTEGER_BOUNDS = {
 };
 
 const CONFIG_FIELD_REQUIRED = 'CONFIG_FIELD_REQUIRED';
-const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
+export const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
 const CONFIG_UNKNOWN_FIELD = 'CONFIG_UNKNOWN_FIELD';
 const CONFIG_JSON_INVALID = 'CONFIG_JSON_INVALID';
 const CONFIG_READ_FAILED = 'CONFIG_READ_FAILED';
-const CONFIG_RULE_INVALID = 'CONFIG_RULE_INVALID';
-
-// Every built-in source, from both catalogs. Exact built-in sources are exempt
-// from the normalization-stability guard because some legitimately contain
-// full-width punctuation that NFKC would fold.
-const BUILT_IN_SOURCES = new Set([
-  ...HARD_DENY_DEFAULT_SOURCES,
-  ...FAST_ALLOW_DEFAULT_SOURCES,
-]);
+export const CONFIG_RULE_INVALID = 'CONFIG_RULE_INVALID';
+export const CONFIG_RULE_UNSTABLE = 'CONFIG_RULE_UNSTABLE';
 
 /**
  * Sanitized configuration error. Messages are built only from fixed templates
@@ -106,11 +100,28 @@ const ERROR_TEMPLATES = {
   [CONFIG_FIELD_INVALID]: 'Invalid configuration field',
   [CONFIG_UNKNOWN_FIELD]: 'Unknown configuration field',
   [CONFIG_RULE_INVALID]: 'Invalid regular expression in configuration field',
+  [CONFIG_RULE_UNSTABLE]:
+    'Rule regular expression is incompatible with message normalization',
 };
 
+/**
+ * Build a sanitized configuration error from a fixed template and a field
+ * path.
+ *
+ * The supplied value, regular-expression source, parser detail and any
+ * underlying cause are never attached.
+ *
+ * @param {string} code
+ * @param {string} field
+ * @returns {ConfigError}
+ */
+export function createConfigError(code, field) {
+  const template = ERROR_TEMPLATES[code] ?? ERROR_TEMPLATES[CONFIG_FIELD_INVALID];
+  return new ConfigError(code, field, `${template} "${field}"`);
+}
+
 function fail(code, field) {
-  const template = ERROR_TEMPLATES[code] ?? 'Invalid configuration field';
-  throw new ConfigError(code, field, `${template} "${field}"`);
+  throw createConfigError(code, field);
 }
 
 function isPlainObject(value) {
@@ -155,14 +166,16 @@ function requireStringArray(value, field) {
  * fails open. An empty `hardDeny` source matches every message and denies
  * everything, which is a fail-closed availability loss rather than
  * fail-open. Whitespace-only sources are meaningless and can match most
- * normalized multi-word messages. A custom source that evaluation
- * normalization would erase or fold is rejected: literals containing a Unicode
- * Cf format character or a variation selector (U+FE00-U+FE0F), and any literal
- * that NFKC would change, raise `CONFIG_RULE_INVALID` at the indexed field.
- * Exact built-in sources are exempt because some legitimately contain
- * full-width punctuation. A non-empty source that does not compile raises
- * `CONFIG_RULE_INVALID` for the indexed field only; no source text is ever
- * attached to the message.
+ * normalized multi-word messages. A custom source that message normalization
+ * would erase or fold is rejected as `CONFIG_RULE_UNSTABLE` at the indexed
+ * field: literal Cf format characters, variation selectors (U+FE00-U+FE0F),
+ * other inert literal whitespace, and regex escapes targeting such characters
+ * cannot behave as written. The stability check is conservative and does not
+ * fully analyse arbitrary regex semantics; a single internal literal space
+ * remains permitted. Exact built-in sources are exempt because some
+ * legitimately contain full-width punctuation. A non-empty source that does
+ * not compile raises `CONFIG_RULE_INVALID` for the indexed field only; no
+ * source text is ever attached to the message.
  */
 function requireRegexArray(value, field) {
   requireStringArray(value, field);
@@ -171,8 +184,8 @@ function requireRegexArray(value, field) {
     if (/^[\s\u0085]*$/.test(source)) {
       fail(CONFIG_FIELD_INVALID, indexedField);
     }
-    if (!BUILT_IN_SOURCES.has(source) && !isNormalizationStableSource(source)) {
-      fail(CONFIG_RULE_INVALID, indexedField);
+    if (!isBuiltInRuleSource(source) && !isNormalizationStableSource(source)) {
+      fail(CONFIG_RULE_UNSTABLE, indexedField);
     }
     try {
       RegExp(source, RULE_REGEX_FLAGS);

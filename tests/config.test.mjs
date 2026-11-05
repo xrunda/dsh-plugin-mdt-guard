@@ -355,7 +355,7 @@ test('empty and whitespace-only rule sources are rejected before compilation', (
   }
 });
 
-test('NEL-only sources are whitespace-rejected and zero-width-only sources are rule-rejected', () => {
+test('NEL-only sources are whitespace-rejected and format-character-only sources are rule-rejected', () => {
   // `\s` and String#trim() both miss U+0085 (NEL), so the validator uses a
   // Unicode-complete full-string whitespace predicate and rejects it.
   assertConfigError(
@@ -365,12 +365,13 @@ test('NEL-only sources are whitespace-rejected and zero-width-only sources are r
     { label: 'hardDeny NEL-only', forbidden: ['\u0085'] },
   );
 
-  // U+200B is not whitespace but is a Unicode Cf character erased by
-  // evaluation normalization, so a zero-width-only source would be silently
-  // inert. It is rejected at the indexed field as CONFIG_RULE_INVALID.
+  // U+200B is not whitespace but is a Unicode Cf format character erased by
+  // evaluation normalization, so a format-character-only source would be
+  // silently inert. It is rejected at the indexed field as
+  // CONFIG_RULE_UNSTABLE.
   assertConfigError(
     { enabled: false, hardDeny: ['\u200B'] },
-    'CONFIG_RULE_INVALID',
+    'CONFIG_RULE_UNSTABLE',
     'hardDeny[0]',
     { label: 'hardDeny U+200B-only', forbidden: ['\u200B'] },
   );
@@ -386,21 +387,52 @@ test('NEL-only sources are whitespace-rejected and zero-width-only sources are r
 });
 
 test('normalization-unstable sources are rejected with sanitized rule errors', () => {
-  // Literal Cf characters, variation selectors and any characters NFKC would
-  // fold can never match normalized input, so an administrator's rule would
-  // be silently inert. Both fields reject them with CONFIG_RULE_INVALID, and
-  // the source text never appears in the error.
-  const unstableSources = ['\u200B\u5FFD\u7565', '\u5FFD\u00AD\u7565', '\uFF29\uFF27\uFF2E\uFF2F\uFF32\uFF25', '\uFF43\uFF4F\uFF4E\uFF46\uFF49\uFF47'];
+  // Literal Cf characters, variation selectors, characters NFKC would fold,
+  // inert literal whitespace and escapes targeting such characters can never
+  // behave as written against normalized input. Both fields reject them with
+  // CONFIG_RULE_UNSTABLE, and the source text never appears in the error.
+  const unstableSources = [
+    '\u200B忽略',
+    '忽\u00AD略',
+    '忽\uFE0F略',
+    'ＩＧＮＯＲＥ',
+    'ｃｏｎｆｉｇ',
+    'a  b',
+    'a\tb',
+    'a\nb',
+    `a${String.fromCharCode(0x85)}b`,
+    ' foo',
+    'foo ',
+    '^ foo$',
+    String.raw`\u200B忽略`,
+    String.raw`\xAD忽略`,
+    String.raw`\uFF21`,
+    String.raw`\p{Cf}忽略`,
+    String.raw`\tfoo`,
+    String.raw`\uFE0F`,
+  ];
   for (const fieldName of ['hardDeny', 'fastAllow']) {
     for (const source of unstableSources) {
       assertConfigError(
         { enabled: false, [fieldName]: [source] },
-        'CONFIG_RULE_INVALID',
+        'CONFIG_RULE_UNSTABLE',
         `${fieldName}[0]`,
         { label: `${fieldName}: unstable source`, forbidden: [source] },
       );
     }
   }
+});
+
+test('stable escaped and literal-space sources are accepted', () => {
+  const sources = ['a', String.raw`\\u200B`, '^foo bar$'];
+  const result = validateConfig({ enabled: false, hardDeny: sources });
+  assert.deepEqual(result.hardDeny, sources);
+
+  // The built-in greeting keeps its full-width punctuation through the
+  // built-in exemption.
+  const greeting = FAST_ALLOW_DEFAULT_SOURCES[0];
+  const exempt = validateConfig({ enabled: false, fastAllow: [greeting] });
+  assert.deepEqual(exempt.fastAllow, [greeting]);
 });
 
 test('an exact built-in source with full-width punctuation is still accepted verbatim', () => {
@@ -413,15 +445,29 @@ test('an exact built-in source with full-width punctuation is still accepted ver
   assert.deepEqual(result.fastAllow, [greeting]);
 });
 
-test('meaningful surrounding whitespace in rule sources is preserved', () => {
-  const result = validateConfig({
-    enabled: false,
-    hardDeny: ['^ foo$'],
-    fastAllow: [' foo '],
-  });
+test('single internal literal spaces are preserved but inert whitespace is rejected', () => {
+  const accepted = validateConfig({ enabled: false, hardDeny: ['^foo bar$'] });
+  assert.deepEqual(accepted.hardDeny, ['^foo bar$']);
 
-  assert.deepEqual(result.hardDeny, ['^ foo$']);
-  assert.deepEqual(result.fastAllow, [' foo ']);
+  const inertWhitespace = [
+    ' foo',
+    'foo ',
+    'a  b',
+    'a\tb',
+    'a\nb',
+    `a${String.fromCharCode(0x85)}b`,
+    '^ foo$',
+  ];
+  for (const fieldName of ['hardDeny', 'fastAllow']) {
+    for (const source of inertWhitespace) {
+      assertConfigError(
+        { enabled: false, [fieldName]: [source] },
+        'CONFIG_RULE_UNSTABLE',
+        `${fieldName}[0]`,
+        { label: `${fieldName}: ${JSON.stringify(source)}`, forbidden: [source] },
+      );
+    }
+  }
 });
 
 test('sparse rule arrays are rejected as CONFIG_FIELD_INVALID', () => {

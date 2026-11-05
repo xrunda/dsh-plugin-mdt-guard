@@ -12,46 +12,31 @@
  * bypass validation.
  */
 
-import { ConfigError } from './config.js';
 import {
-  FAST_ALLOW_DEFAULT_SOURCES,
+  CONFIG_FIELD_INVALID,
+  CONFIG_RULE_INVALID,
+  CONFIG_RULE_UNSTABLE,
+  createConfigError,
+} from './config.js';
+import {
   FAST_ALLOW_RULES,
-  HARD_DENY_DEFAULT_SOURCES,
   HARD_DENY_RULES,
   RULE_REGEX_FLAGS,
+  isBuiltInRuleSource,
   isNormalizationStableSource,
+  stripFormatCharacters,
 } from './rule-defaults.js';
-
-const CONFIG_FIELD_INVALID = 'CONFIG_FIELD_INVALID';
-const CONFIG_RULE_INVALID = 'CONFIG_RULE_INVALID';
-
-const ERROR_TEMPLATES = {
-  [CONFIG_FIELD_INVALID]: 'Invalid configuration field',
-  [CONFIG_RULE_INVALID]: 'Invalid regular expression in configuration field',
-};
 
 // A full-string whitespace predicate equivalent to /^[\s\u0085]*$/.
 // String#trim() and \s alone miss U+0085 (NEL).
 const WHITESPACE_ONLY = /^[\s\u0085]*$/;
-// Evaluation erases every Unicode Cf format character and the variation
-// selectors U+FE00-U+FE0F. Kept as explicit escapes so no invisible literal
-// ever lives in this source file.
-const FORMAT_CHARS = /[\p{Cf}\uFE00-\uFE0F]/gu;
-// Every built-in source, from both catalogs. Exact built-in sources are exempt
-// from the normalization-stability guard because some legitimately contain
-// full-width punctuation that NFKC would fold.
-const ALL_BUILT_IN_SOURCES = new Set([
-  ...HARD_DENY_DEFAULT_SOURCES,
-  ...FAST_ALLOW_DEFAULT_SOURCES,
-]);
 // Collapse all whitespace, including U+0085 (NEL), to a single space. NEL is
 // matched explicitly because `\s` does not include it; this must stay in
 // parity with config.js's /^[\s\u0085]*$/ source predicate.
 const WHITESPACE_RUN = /[\s\u0085]+/g;
 
 function fail(code, field) {
-  const template = ERROR_TEMPLATES[code] ?? ERROR_TEMPLATES[CONFIG_FIELD_INVALID];
-  throw new ConfigError(code, field, `${template} "${field}"`);
+  throw createConfigError(code, field);
 }
 
 function isRuleConfig(value) {
@@ -123,8 +108,8 @@ function compileField(value, field, builtInRules, builtInSourceMetadata) {
     // A custom source containing characters evaluation normalization erases or
     // folds could never match; reject it rather than compile a silently inert
     // rule. Exact built-in sources keep their catalog identity and are exempt.
-    if (!ALL_BUILT_IN_SOURCES.has(source) && !isNormalizationStableSource(source)) {
-      fail(CONFIG_RULE_INVALID, indexedField);
+    if (!isBuiltInRuleSource(source) && !isNormalizationStableSource(source)) {
+      fail(CONFIG_RULE_UNSTABLE, indexedField);
     }
 
     let regexp;
@@ -159,7 +144,8 @@ function compileField(value, field, builtInRules, builtInSourceMetadata) {
  * @param {object} config
  * @returns {{ hardDeny: ReadonlyArray<object>, fastAllow: ReadonlyArray<object> }}
  * @throws {TypeError} when `config` is not a non-null, non-array object
- * @throws {ConfigError} for invalid field shapes, empty sources or bad regexes
+ * @throws {ConfigError} for invalid field shapes, empty sources, sources that
+ *   message normalization erases or folds, or bad regexes
  */
 export function compileRules(config) {
   if (!isRuleConfig(config)) {
@@ -194,7 +180,7 @@ export function compileRules(config) {
  * The whitespace-free variant is omitted when it equals the collapsed one.
  */
 function normalizeVariants(text) {
-  const folded = text.normalize('NFKC').replace(FORMAT_CHARS, '').trim();
+  const folded = stripFormatCharacters(text.normalize('NFKC')).trim();
   const collapsed = folded.replace(WHITESPACE_RUN, ' ').trim();
   const compact = folded.replace(WHITESPACE_RUN, '');
   return compact === collapsed ? [collapsed] : [collapsed, compact];

@@ -18,7 +18,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.role-switch',
     category: 'H',
-    source: String.raw`(?:(?:扮演|假装|充当|切换|更换).{0,6}(?:医生|专家|护士|黑客|角色|助手|AI|模型)|(?:作为|变成|你现在是|从现在开始你是).{0,6}(?:角色|AI|人工智能|模型|黑客))|(?:act\s+as|pretend\s+to\s+be|you\s+are\s+now).{0,24}(?:doctor|expert|hacker|assistant|model|role|\bai\b)`,
+    source: String.raw`(?:(?:扮演|假装|充当).{0,6}(?:医生|专家|护士|黑客|角色|助手|AI|模型)|(?:切换|更换)角色|作为.{0,6}(?:角色|AI|人工智能|模型|黑客)|(?:变成|你现在是|从现在开始你是).{0,6}(?:角色|助手|AI|人工智能|模型|黑客))|(?:act\s+as|pretend\s+to\s+be|you\s+are\s+now).{0,24}(?:doctor|expert|hacker|assistant|model|role|\bai\b)`,
   }),
   Object.freeze({
     id: 'hard-deny.system-prompt-exfiltration',
@@ -28,7 +28,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.any-question-permission',
     category: 'H',
-    source: String.raw`(现在|从此|以后|接下来).{0,6}(可以|能|允许|尽管).{0,6}(回答|讨论|聊).{0,6}(任何|所有|一切|任意)(问题|话题|内容|提问|请求|领域|题目)|(?:from\s+now\s+on|now|you\s+can).{0,24}(?:answer|discuss|talk\s+about).{0,16}(?:anything|everything|any\s+topic|all\s+questions)`,
+    source: String.raw`(现在|从此|以后|接下来).{0,6}(可以|能|允许|尽管).{0,6}(回答|处理|讨论|聊).{0,6}(任何|所有|一切|任意).{0,6}(问题|话题|内容|提问|请求|领域|题目)|(?:from\s+now\s+on|\bnow\b|you\s+can).{0,24}(?:answer|discuss|handle|talk\s+about).{0,16}(?:anything|everything|any\s+topic|all\s+questions)`,
   }),
   Object.freeze({
     id: 'hard-deny.jailbreak',
@@ -118,24 +118,153 @@ export const FAST_ALLOW_DEFAULT_SOURCES = Object.freeze(
   FAST_ALLOW_RULES.map((rule) => rule.source),
 );
 
-// Characters erased by evaluation normalization: every Unicode `Cf` format
-// character plus the variation-selector range U+FE00-U+FE0F. Written with
-// escapes so no invisible literal lives in this source file. Non-global so
-// repeated `test` calls do not depend on `lastIndex`.
-const NORMALIZATION_UNSTABLE = /[\p{Cf}\uFE00-\uFE0F]/u;
+const BUILT_IN_SOURCE_SET = new Set([
+  ...HARD_DENY_DEFAULT_SOURCES,
+  ...FAST_ALLOW_DEFAULT_SOURCES,
+]);
 
 /**
- * Whether a literal regex source can ever match normalized input.
+ * Whether a source is an exact built-in source from either catalog.
  *
- * Evaluation normalization erases `Cf` characters and variation selectors and
- * NFKC-folds the text. A literal source containing such characters can never
- * match normalized input, so configuration rejects it instead of letting an
- * administrator's rule silently do nothing. Callers exempt exact built-in
- * sources, some of which legitimately contain full-width punctuation.
+ * Exact built-in sources are exempt from the normalization-stability guard
+ * because some legitimately contain full-width punctuation that NFKC folds.
  *
  * @param {string} source
  * @returns {boolean}
  */
+export function isBuiltInRuleSource(source) {
+  return BUILT_IN_SOURCE_SET.has(source);
+}
+
+// Evaluation erases every Unicode `Cf` format character and the variation
+// selectors U+FE00-U+FE0F. Global because it is used only with
+// `String#replace` (never with `.test`), and written with escapes so no
+// invisible literal lives in this file. The mutable object is not exported.
+const FORMAT_CHARACTERS = /[\p{Cf}\uFE00-\uFE0F]/gu;
+
+/**
+ * Remove the format characters that evaluation normalization erases.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function stripFormatCharacters(text) {
+  return text.replace(FORMAT_CHARACTERS, '');
+}
+
+// Non-global where `.test` is used so repeated calls never depend on
+// `lastIndex`.
+const LITERAL_FORMAT_CHARACTER = /[\p{Cf}\uFE00-\uFE0F]/u;
+const WHITESPACE_CHARACTER = /[\s\u0085]/u;
+const FORMAT_CATEGORY_CHARACTER = /\p{Cf}/u;
+const VARIATION_SELECTOR = /[\uFE00-\uFE0F]/u;
+
+// Global scanner used only with `String#matchAll`, which does not mutate the
+// regex `lastIndex`. Captures the target of `\uXXXX`, `\u{...}`, `\xXX`,
+// control escapes and the `\p{Cf}` / `\P{Cf}` / `\p{C}` / `\P{C}` category
+// escapes.
+const ESCAPE_SCAN =
+  /\\(?:u\{([0-9A-Fa-f]+)}|u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2})|([tnrfv])|[pP]\{(Cf|C)})/g;
+
+function hasOddPrecedingBackslashes(source, index) {
+  let count = 0;
+  for (let position = index - 1; position >= 0 && source[position] === '\\'; position -= 1) {
+    count += 1;
+  }
+  return count % 2 === 1;
+}
+
+function isUnstableCodePoint(codePoint) {
+  if (codePoint > 0x10ffff) {
+    return true;
+  }
+  const character = String.fromCodePoint(codePoint);
+  return (
+    FORMAT_CATEGORY_CHARACTER.test(character) ||
+    VARIATION_SELECTOR.test(character) ||
+    (codePoint !== 0x0020 && WHITESPACE_CHARACTER.test(character)) ||
+    character.normalize('NFKC') !== character
+  );
+}
+
+function hasUnstableEscape(source) {
+  for (const match of source.matchAll(ESCAPE_SCAN)) {
+    if (hasOddPrecedingBackslashes(source, match.index)) {
+      continue;
+    }
+    const [, braced, unicode, hex, control, category] = match;
+    if (control !== undefined || category !== undefined) {
+      return true;
+    }
+    let codePoint;
+    if (braced !== undefined) {
+      codePoint = Number.parseInt(braced, 16);
+    } else if (unicode !== undefined) {
+      codePoint = Number.parseInt(unicode, 16);
+    } else {
+      codePoint = Number.parseInt(hex, 16);
+    }
+    if (isUnstableCodePoint(codePoint)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasInertLiteralWhitespace(source) {
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (!WHITESPACE_CHARACTER.test(character)) {
+      continue;
+    }
+    if (character !== '\u0020') {
+      return true;
+    }
+    const previous = index > 0 ? source[index - 1] : undefined;
+    const next = index + 1 < source.length ? source[index + 1] : undefined;
+    if (previous === '\u0020' || next === '\u0020') {
+      return true;
+    }
+    if (previous === undefined || next === undefined) {
+      return true;
+    }
+    // A space directly inside a leading `^` or trailing `$` anchor would be
+    // trimmed away (for example `^ foo$`); `[^ ]` stays accepted because
+    // only the anchors at the very start and very end are checked.
+    if (index === 1 && source[0] === '^') {
+      return true;
+    }
+    if (index === source.length - 2 && source[source.length - 1] === '$') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a custom regex source stays meaningful under message normalization.
+ *
+ * Evaluation NFKC-folds text, erases every Unicode `Cf` format character and
+ * the variation selectors `U+FE00`-`U+FE0F`, collapses whitespace and trims.
+ * A source containing a literal format character, a variation selector,
+ * literal whitespace other than a single internal `U+0020`, or a regex escape
+ * targeting one of those code points cannot behave as written against
+ * normalized input, so configuration rejects it rather than compiling a
+ * silently inert rule. Escape scanning respects backslash parity, so an
+ * escaped backslash followed by `u200B` text stays stable.
+ *
+ * This check is conservative: it does not prove that a source can match, and
+ * arbitrary regex semantics are not fully analysed.
+ *
+ * @param {string} source
+ * @returns {boolean} `true` when the source contains no literal character or
+ *   escape target that normalization erases or folds
+ */
 export function isNormalizationStableSource(source) {
-  return !NORMALIZATION_UNSTABLE.test(source) && source.normalize('NFKC') === source;
+  return (
+    !LITERAL_FORMAT_CHARACTER.test(source) &&
+    !hasInertLiteralWhitespace(source) &&
+    !hasUnstableEscape(source) &&
+    source.normalize('NFKC') === source
+  );
 }
