@@ -58,6 +58,10 @@ test('package manifest defines the private ESM bundle contract', async () => {
 
   assert.equal(manifest.exports?.['./config'], './config.js');
   assert.ok(files.includes('config.js'), 'files must include config.js');
+  assert.equal(manifest.exports?.['./rules'], './rules.js');
+  for (const requiredPath of ['rules.js', 'rule-defaults.js']) {
+    assert.ok(files.includes(requiredPath), `files must include ${requiredPath}`);
+  }
   for (const entry of files) {
     // Normalize leading slash forms ("./" and bare "/", including
     // duplicates) so entries like "./Docs" or "//tests/foo" cannot slip into
