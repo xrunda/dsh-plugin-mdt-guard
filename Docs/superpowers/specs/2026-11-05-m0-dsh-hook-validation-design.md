@@ -32,6 +32,11 @@ specific behavior each source supports. If a detail cannot be established
 from those sources, label it as unverified and carry it forward as a hospital
 environment check rather than inferring behavior from the PRD.
 
+When sources disagree, prefer the tagged source/release artifact for the
+specific version under review, then versioned documentation, then current
+unversioned documentation. Record the disagreement rather than silently
+resolving it.
+
 Do not add a mock test merely to assert guessed host APIs. If the official
 source establishes a stable, meaningful contract that can be represented
 locally, add a small isolated contract test; otherwise the issue deliverable
@@ -39,7 +44,8 @@ is a reproducible verification report and test procedure.
 
 ## Deliverables
 
-- A validation report under `Docs/` that records sources, versions, findings,
+- A validation report at
+  `Docs/M0-plugin-hook-validation.md` that records sources, versions, findings,
   reproducible steps, and unresolved checks.
 - A clear compatibility conclusion for rc.3 and rc.5, limited to behaviors
   actually supported by evidence.
