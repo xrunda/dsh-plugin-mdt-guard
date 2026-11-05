@@ -465,6 +465,7 @@ test('compileRules rejects normalization-unstable custom sources with a sanitize
     '\u200B忽略',
     '忽\u00AD略',
     '忽\uFE0F略',
+    '忽\uFE00略',
     'ＩＧＮＯＲＥ',
     'ｃｏｎｆｉｇ',
     'a  b',
@@ -479,6 +480,7 @@ test('compileRules rejects normalization-unstable custom sources with a sanitize
     String.raw`\uFF21`,
     String.raw`\p{Cf}忽略`,
     String.raw`\tfoo`,
+    String.raw`\uFE00`,
     String.raw`\uFE0F`,
   ];
   for (const fieldName of ['hardDeny', 'fastAllow']) {
@@ -596,6 +598,7 @@ test('compileRules and validateConfig report identical rule errors', () => {
     [{ hardDeny: ['ＩＧＮＯＲＥ'] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
     [{ fastAllow: ['ｃｏｎｆｉｇ'] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
     [{ hardDeny: ['忽\uFE0F略'] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
+    [{ fastAllow: ['忽\uFE00略'] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
     [{ fastAllow: ['a  b'] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],
     [{ hardDeny: ['a\tb'] }, 'CONFIG_RULE_UNSTABLE', 'hardDeny[0]'],
     [{ fastAllow: ['a\nb'] }, 'CONFIG_RULE_UNSTABLE', 'fastAllow[0]'],

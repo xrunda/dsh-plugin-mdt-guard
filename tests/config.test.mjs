@@ -395,6 +395,8 @@ test('normalization-unstable sources are rejected with sanitized rule errors', (
     '\u200B忽略',
     '忽\u00AD略',
     '忽\uFE0F略',
+    '忽\uFE00略',
+    '\uFE00',
     'ＩＧＮＯＲＥ',
     'ｃｏｎｆｉｇ',
     'a  b',
