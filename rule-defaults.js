@@ -13,7 +13,7 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.prompt-injection',
     category: 'H',
-    source: String.raw`(忽略|无视|忘记|忘掉|跳过|绕过|不要遵守|别管|不要管|不用管|不必遵守).{0,8}(指令|规则|提示词|提示|系统提示|内部规则|安全策略|内容政策|(?:你的|你们的|系统|安全|内容)(?:限制|约束|设定))|(?:ignore|disregard|forget|bypass|override|skip)(?:.{0,24}(?:previous|prior|above|earlier|all|any|system|your).{0,24}(?:instructions?|rules?|prompts?|constraints?|guidelines?)|.{0,8}(?:everything|all)\s*above)`,
+    source: String.raw`(忽略|无视|忘记|忘掉|跳过|绕过|不要遵守|别管|不要管|不用管|不必遵守).{0,8}(指令|规则|提示词|提示|系统提示|内部规则|安全策略|内容政策|(?:你的|你们的|系统|安全|内容)(?:限制|约束|设定))|\b(?:ignore|disregard|forget|bypass|override|skip)\s*(?:(?:(?:all|any|the|your|our|system|previous|prior|above|earlier|of)\s*){0,4}(?:instructions?|rules?|prompts?|constraints?|guidelines?)|(?:everything|all)(?:\s*of)?(?:\s*the)?\s*above)`,
   }),
   Object.freeze({
     id: 'hard-deny.role-switch',
@@ -23,12 +23,12 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.system-prompt-exfiltration',
     category: 'H',
-    source: String.raw`(导出|输出|显示|打印|告诉我|泄露|透露|复述|重复|列出|读取|查看|打开|获取|给我|发我).{0,8}(系统提示词|系统提示|系统指令|内部规则|内部指令|隐藏指令|初始指令|(?:你的|你们的)(?:系统)?(?:规则|指令|提示词))|(?:show|print|reveal|dump|repeat|tell\s+me|give\s+me|read|export).{0,16}(?:system\s*prompt|internal\s*(?:rules?|instructions?)|your\s+(?:rules?|instructions?|prompt))`,
+    source: String.raw`(导出|输出|显示|打印|告诉我|泄露|透露|复述|重复|列出|读取|查看|打开|获取|给我|发我).{0,8}(系统提示词|系统提示|系统指令|内部规则|内部指令|隐藏指令|初始指令|(?:你的|你们的)(?:系统)?(?:规则|指令|提示词))|\b(?:show(?!case)|print(?!er|ed|ing)|reveal|dump|repeat|tell\s+me|give\s+me|export).{0,16}(?:system\s*prompt|internal\s*(?:rules?|instructions?)|your\s+(?:rules?|instructions?|prompt))`,
   }),
   Object.freeze({
     id: 'hard-deny.any-question-permission',
     category: 'H',
-    source: String.raw`(现在|从此|以后|接下来).{0,6}(可以|能|允许|尽管).{0,6}(回答|处理|讨论|聊).{0,6}(任何|所有|一切|任意).{0,6}(问题|话题|内容|提问|请求|领域|题目)|(?:from\s+now\s+on|\bnow\b|you\s+can).{0,24}(?:answer|discuss|handle|talk\s+about).{0,16}(?:anything|everything|any\s+topic|all\s+questions)`,
+    source: String.raw`(现在|从此|以后|接下来).{0,6}(可以|能|允许|尽管).{0,6}(回答|处理|讨论|聊).{0,6}(任何|所有|一切|任意).{0,6}(问题|话题|内容|提问|请求|领域|题目)|(?:from\s+now\s+on|now\s+you\s+(?:can|may)|you\s+(?:can|may)(?:\s+now)?|you\s+are\s+(?:now\s+)?allowed\s+to).{0,24}\b(?:answer|discuss|handle|talk\s+about)\b.{0,16}\b(?:anything|everything|any\s+topic|all\s+questions)\b`,
   }),
   Object.freeze({
     id: 'hard-deny.jailbreak',
@@ -43,32 +43,32 @@ export const HARD_DENY_RULES = Object.freeze([
   Object.freeze({
     id: 'hard-deny.read-sensitive',
     category: 'G',
-    source: String.raw`(读取|查看|看看|看下|看一下|瞅瞅|查一下|查下|打印|输出|显示|导出|列出|打开|获取|给我|发我|读出|贴出来|\b(?:dump|cat|echo|print|show|read|list|export)(?:ed|ing|s)?\b|\bgive\s+me\b).{0,12}(配置(?!\s*(?:[^\s，。,.!?！？]{0,6})?(?:药|液|水|剂|膏|糖|盐|霉素|西林|沙星|洛尔|地平|普利|沙坦|他汀|胰岛素|青霉素|抗生素|头孢|维生素))|config(?:\.json)?|guard\.json|settings\.ya?ml|\.env|环境变量|env(?:ironment)?\s*(?:vars?|variables?)|日志|\blog(?:s|files?)?\b|令牌|\btokens?\b|密钥|\bsecrets?\b|\bapi\s*keys?\b|证书|\bcert(?:ificate)?s?\b)`,
+    source: String.raw`(读取|查看|看看|看下|看一下|瞅瞅|查一下|查下|打印|输出|显示|导出|列出|打开|获取|给我|发我|读出|贴出来|\b(?:dump|cat|echo|print|show|read|list|export)(?:ed|ing|s)?\b|\bgive\s+me\b).{0,12}(配置(?!\s*(?:[^\s，。,.!?！？]{0,6})?(?:药物|药液|药水|药品|药剂|药膏|液体|溶液|输液|盐水|葡萄糖|霉素|西林|沙星|洛尔|地平|普利|沙坦|他汀|胰岛素|青霉素|抗生素|头孢|维生素))|config(?:\.json)?|guard\.json|settings\.ya?ml|\.env|环境变量|env(?:ironment)?\s*(?:vars?|variables?)|(?<!病程)(?<!护理)(?<!手术)(?<!用药)(?<!治疗)(?<!病情)(?<!病历)(?<!门诊)(?<!住院)(?<!麻醉)(?<!检验)(?<!检查)日志|\blog(?![\s-]+(?:in|on|out)\b)(?:s|files?)?\b|令牌|\btokens?\b|密钥|\bsecrets?\b|\bapi\s*keys?\b|证书|\bcert(?:ificate)?s?\b)`,
   }),
   Object.freeze({
     id: 'hard-deny.read-sensitive-reverse',
     category: 'G',
-    source: String.raw`(配置(?:文件|项|参数)|config(?:\.json)?|guard\.json|settings\.ya?ml|\.env|环境变量|日志|\blog(?:s|files?)?\b|令牌|\btokens?\b|密钥|\bsecrets?\b|\bapi\s*keys?\b|证书|\bcert(?:ificate)?s?\b).{0,12}(在哪|在哪里|位置|路径|内容|打印|输出|读取|查看|打开|发我|给我|导出|\b(?:dump|cat|show|read|list|export)(?:ed|ing|s)?\b)`,
+    source: String.raw`(配置(?:文件|项|参数)|config(?:\.json)?|guard\.json|settings\.ya?ml|\.env|环境变量|(?<!病程)(?<!护理)(?<!手术)(?<!用药)(?<!治疗)(?<!病情)(?<!病历)(?<!门诊)(?<!住院)(?<!麻醉)(?<!检验)(?<!检查)日志|\blog(?![\s-]+(?:in|on|out)\b)(?:s|files?)?\b|令牌|\btokens?\b|密钥|\bsecrets?\b|\bapi\s*keys?\b|证书|\bcert(?:ificate)?s?\b).{0,12}(在哪|在哪里|位置|路径|内容|打印|输出|读取|查看|打开|发我|给我|导出|\b(?:dump|cat|show|read|list|export)(?:ed|ing|s)?\b)`,
   }),
   Object.freeze({
     id: 'hard-deny.command-exec',
     category: 'G',
-    source: String.raw`(执行|运行|运行一下|敲|输入|调用|启动|开启|打开).{0,8}(命令|指令|shell|bash|zsh|powershell|cmd|终端|terminal|命令行|脚本)|(?:run|execute|open|launch|start).{0,16}(?:\bcommands?\b|\bshells?\b|\bbash\b|\bzsh\b|\bpowershell\b|\bcmd\b|\bterminals?\b|\bscripts?\b)`,
+    source: String.raw`(执行|运行|运行一下|敲|输入|调用|启动|开启|打开).{0,8}(命令|指令|shell|bash|zsh|powershell|cmd|终端|terminal|命令行|脚本)|(?:\b(?:run|execute|open|launch|start)\b).{0,16}(?:\bcommands?\b|\bshells?\b|\bbash\b|\bzsh\b|\bpowershell\b|\bcmd\b|\bterminals?\b|\bscripts?\b)`,
   }),
   Object.freeze({
     id: 'hard-deny.software-install',
     category: 'G',
-    source: String.raw`(安装|卸载|重装|升级|降级).{0,8}(软件|程序|应用|依赖|dsh|node|npm|pnpm|yarn|pip|python|java)|(?:install|uninstall|reinstall|upgrade|downgrade).{0,16}(?:\bsoftware\b|\bpackages?\b(?![\s-]*(?:leaflet|insert))|\bdependenc(?:y|ies)\b|\bdsh\b|\bnode(?:js)?\b|\bnpm\b|\bpnpm\b|\byarn\b|\bpip\b|\bpython3?\b|\b(?:java|javascript)\b)|(?:npm|pnpm|yarn|pip)\s+(?:install|add|remove|uninstall)`,
+    source: String.raw`(安装|卸载|重装|升级|降级).{0,8}(软件|程序|应用|依赖|dsh|node|npm|pnpm|yarn|pip|python|java)|(?:\b(?:install|uninstall|reinstall|upgrade|downgrade)\b).{0,16}(?:\bsoftware\b|\bpackages?\b(?![\s-]*(?:leaflet|insert))|\bdependenc(?:y|ies)\b|\bdsh\b|\bnode(?:js)?\b|\bnpm\b|\bpnpm\b|\byarn\b|\bpip\b|\bpython3?\b|\b(?:java|javascript)\b)|(?:npm|pnpm|yarn|pip)\s+(?:install|add|remove|uninstall)\b`,
   }),
   Object.freeze({
     id: 'hard-deny.config-modify',
     category: 'G',
-    source: String.raw`(修改|更改|改一下|改掉|改|编辑|写入|覆盖|删除|删掉|清空|重置|更新).{0,12}(配置(?!\s*(?:[^\s，。,.!?！？]{0,6})?(?:药|液|水|剂|膏|糖|盐|霉素|西林|沙星|洛尔|地平|普利|沙坦|他汀|胰岛素|青霉素|抗生素|头孢|维生素))(?:文件|项|参数)?|config(?:\.json)?|guard\.json|settings\.ya?ml|插件配置|系统配置|环境变量|\.env|系统设置|注册表|日志|HIS\s*(?:地址|配置))|(?:modify|change|edit|write|overwrite|delete|clear|reset|update).{0,16}(?:config(?:uration|\.json)?|\bguard\.json\b|\bsettings\.ya?ml\b|\benvironment\s*variables?\b|\bregistr(?:y|ies)\b|\.env\b|\blogs?\b)`,
+    source: String.raw`(修改|更改|改一下|改掉|改|编辑|写入|覆盖|删除|删掉|清空|重置|更新).{0,12}(配置(?!\s*(?:[^\s，。,.!?！？]{0,6})?(?:药物|药液|药水|药品|药剂|药膏|液体|溶液|输液|盐水|葡萄糖|霉素|西林|沙星|洛尔|地平|普利|沙坦|他汀|胰岛素|青霉素|抗生素|头孢|维生素))(?:文件|项|参数)?|config(?:\.json)?|guard\.json|settings\.ya?ml|插件配置|系统配置|环境变量|\.env|系统设置|注册表|(?<!病程)(?<!护理)(?<!手术)(?<!用药)(?<!治疗)(?<!病情)(?<!病历)(?<!门诊)(?<!住院)(?<!麻醉)(?<!检验)(?<!检查)日志|HIS\s*(?:地址|配置))|(?:\b(?:modify|change|edit|write|overwrite|delete|clear|reset|update)\b).{0,16}(?:config(?:uration|\.json)?|\bguard\.json\b|\bsettings\.ya?ml\b|\benvironment\s*variables?\b|\bregistr(?:y|ies)\b|\.env\b|\blog(?:s|files?)?\b)`,
   }),
   Object.freeze({
     id: 'hard-deny.service-ops',
     category: 'G',
-    source: String.raw`(?:重启|启动|停止|关闭|杀掉)(?:.{0,8}(?:服务|进程|插件|dsh|操作系统|主机|服务器|容器)|\s*(?:(?:一下|下|所有|全部|整个|该|本|当前|本机|本地|远程|这台|那台|这个|那个)\s*)?系统(?=$|\s*(?:[!！。,.，?？;；:：、~～…]|吧|啊|了|呢|呀|嘛|呗|并|后|再|然后|之后|服务|进程|配置|设置|日志|故障|异常|错误|文件|目录|环境)))|(?:排查|调试|诊断|修复).{0,8}(?:服务|进程|插件|dsh|主机|服务器|容器|操作系统|系统故障|系统异常|系统错误|系统服务|系统进程|系统配置|系统设置|系统日志|系统环境|系统文件|系统目录)|(?:restart|start|stop|kill|debug|diagnose|fix).{0,16}(?:service(?:s)?(?![a-z])|process(?:es)?(?!\s*(?:of|for))(?![a-z])|plugin(?:s)?(?![a-z])|dsh(?![a-z])|server(?:s)?(?![a-z])|container(?:s)?(?![a-z])|host(?:s)?(?![a-z]))`,
+    source: String.raw`(?:重启|启动|停止|关闭|杀掉)(?:.{0,8}(?:服务|进程|插件|dsh|操作系统|主机|服务器|容器)|\s*(?:(?:一下|下|所有|全部|整个|该|本|当前|本机|本地|远程|这台|那台|这个|那个)\s*)?系统(?=$|\s*(?:[!！。,.，?？;；:：、~～…]|吧|啊|了|呢|呀|嘛|呗|并|后|再|然后|之后|服务|进程|配置|设置|日志|故障|异常|错误|文件|目录|环境)))|(?:排查|调试|诊断|修复).{0,8}(?:服务|进程|插件|dsh|主机|服务器|容器|操作系统|系统故障|系统异常|系统错误|系统服务|系统进程|系统配置|系统设置|系统日志|系统环境|系统文件|系统目录)|(?:\b(?:restart(?!ed)|start(?!le|up)|stop(?!cock|watch)|kill(?!er)|fix(?!ation|ture)|debug|diagnose))(?!\s*(?:(?:the|a|an)\s*)?(?:care|disease|treatment|diagnostic|clinical|pathologic(?:al)?|physiologic(?:al)?|inflammatory|healing|aging|learning|business|decision|production|manufacturing|fixation)\s*process\b).{0,16}(?:service(?:s)?(?![a-z])|process(?:es)?(?!\s*(?:of|for)\b)(?![a-z])|plugin(?:s)?(?![a-z])|dsh(?![a-z])|server(?:s)?(?![a-z])|container(?:s)?(?![a-z])|host(?:s)?(?![a-z]))`,
   }),
 ]);
 
@@ -86,7 +86,7 @@ export const FAST_ALLOW_RULES = Object.freeze([
   Object.freeze({
     id: 'fast-allow.software-help',
     category: 'C',
-    source: String.raw`(插件|本软件|这个软件|该软件|平台|界面|按钮|菜单|页面|PPT|演示文稿|版本|安装包|客户端|网页|登录页).{0,12}(怎么|如何|怎样|在哪|哪里|哪儿|咋)`,
+    source: String.raw`^(?:这个|该|本)?(插件|软件|平台|界面|按钮|菜单|页面|PPT|演示文稿|版本|安装包|客户端|网页|登录页)(?!.{0,12}的).{0,12}(怎么|如何|怎样|在哪|哪里|哪儿|咋)[\s]*(用|使用|下载|安装|更新|升级|登录|导出|预览|生成|打开|设置|配置|操作|注册|找回密码)(?:[\s!！。,.，~～?？、]*(?:呀|啊|呢|吧|吗|嘛)?[\s!！。,.，~～?？、]*)$`,
   }),
   Object.freeze({
     id: 'fast-allow.software-help',
@@ -96,7 +96,7 @@ export const FAST_ALLOW_RULES = Object.freeze([
   Object.freeze({
     id: 'fast-allow.software-help',
     category: 'C',
-    source: String.raw`(插件|软件|平台|PPT|版本|按钮|界面).{0,12}(怎么用|如何使用|在哪下载|在哪里下载|怎么下载|怎么安装|怎么更新|怎么升级|怎么登录|怎么导出|怎么预览|怎么生成|怎么打开|怎么设置|怎么配置|支持哪些|有什么功能)`,
+    source: String.raw`^(?:这个|该|本)?(插件|软件|平台|PPT|版本|按钮|界面)(?!.{0,12}的).{0,12}(怎么用|如何使用|在哪下载|在哪里下载|怎么下载|怎么安装|怎么更新|怎么升级|怎么登录|怎么导出|怎么预览|怎么生成|怎么打开|怎么设置|怎么配置|支持哪些|有什么功能)[\s!！。,.，~～?？、]*(?:呀|啊|呢|吧|吗|嘛)?[\s!！。,.，~～?？、]*$`,
   }),
   Object.freeze({
     id: 'fast-allow.software-help',
@@ -106,7 +106,7 @@ export const FAST_ALLOW_RULES = Object.freeze([
   Object.freeze({
     id: 'fast-allow.software-help',
     category: 'C',
-    source: String.raw`^(怎么|如何|怎样)(把|将).{0,8}(导出|预览|生成|下载|打开|更新|升级)`,
+    source: String.raw`^(怎么|如何|怎样)(把|将)(?!\s*(?:系统|功能)).{0,8}(导出|预览|生成|下载|打开|更新|升级)`,
   }),
 ]);
 
