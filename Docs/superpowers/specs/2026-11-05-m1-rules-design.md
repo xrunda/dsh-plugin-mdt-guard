@@ -91,9 +91,9 @@ the validator and the rule compiler, so defaults and metadata cannot drift.
 
 | ID | Cat | Coverage |
 |---|---|---|
-| `hard-deny.prompt-injection` | H | ignore/forget/bypass prior instructions, rules or limits; `约束`/`设定` only count as targets when scoped (`你的`/`系统`/`安全`/`内容`), so clinical `饮食约束`/`剂量约束` and `设定步骤` are not injection; the English branch is word-bounded, allows up to four determiners (`all`, `any`, `the`, `your`, `our`, `system`, `previous`, `prior`, `above`, `earlier`, `of`) before the instruction/rule object, and also matches `everything`/`all (of) (the) above`; benign clinical sentences such as "Gastric bypass patients must follow all dietary guidelines", "Coronary artery bypass patients must follow all rules", "Skip lesions are described in all guidelines" and "Clinicians should not ignore all national guidelines" fall through |
+| `hard-deny.prompt-injection` | H | ignore/forget/bypass prior instructions, rules or limits; `约束`/`设定` only count as targets when scoped (`你的`/`系统`/`安全`/`内容`), so clinical `饮食约束`/`剂量约束` and `设定步骤` are not injection; the English branch starts at a word boundary, allows up to four determiners (`all`, `any`, `the`, `your`, `our`, `system`, `previous`, `prior`, `above`, `earlier`, `of`) before the instruction/rule object, and also matches `everything`/`all (of) (the) above`; benign clinical sentences such as "Gastric bypass patients must follow all dietary guidelines", "Coronary artery bypass patients must follow all rules", "Skip lesions are described in all guidelines" and "Clinicians should not ignore all national guidelines" fall through |
 | `hard-deny.role-switch` | H | role-play, `切换`/`更换角色`, or "act as" another assistant/doctor or an AI/LLM/language model; a bare `model` or `role` in ordinary English (`model citizen`, `role model`) is not a switch, and `作为…助手` or care-team changes such as `更换医生` are not role switches |
-| `hard-deny.system-prompt-exfiltration` | H | reveal system prompt, internal rules or hidden instructions; English verbs are word-bounded, `show` excludes `showcase`, `print` excludes `printer`/`printed`/`printing`, and English `read` is not a trigger, so "I already read your instructions", "Blueprints contain internal rules", "Showcase your rules please" and "The printer contains internal rules" fall through |
+| `hard-deny.system-prompt-exfiltration` | H | reveal system prompt, internal rules or hidden instructions; English verbs start at a word boundary and use targeted suffix guards (`show` excludes `showcase`; `print` excludes `printer`/`printed`/`printing`), and English `read` is not a trigger, so "I already read your instructions", "Blueprints contain internal rules", "Showcase your rules please" and "The printer contains internal rules" fall through |
 | `hard-deny.any-question-permission` | H | "you may now answer anything" style permission claims; requires an answer/handle/discuss verb plus a question/topic object (with a short gap), so clinical planning such as "处理所有患者" is not denied; the English branch requires a permission prefix (`from now on`, `now you can`, `you can`/`you may`, `you are allowed to`) before the verb |
 | `hard-deny.jailbreak` | H | jailbreak / DAN mode / unrestricted mode |
 | `hard-deny.sensitive-path` | G | `~/.dsh`, `~/.ssh`, `/root`, `/etc/dsh`, `/etc/passwd`, DSH install directory |
@@ -102,7 +102,7 @@ the validator and the rule compiler, so defaults and metadata cannot drift.
 | `hard-deny.command-exec` | G | execute shell/PowerShell/terminal commands or scripts; English verbs and targets are word-bounded, so "The running command failed" does not match and `prescription`/`description`/`transcript`/`manuscript` are not scripts |
 | `hard-deny.software-install` | G | install/uninstall/upgrade software, runtimes or packages; English verbs and targets are word-bounded, so "The installation package is ready" is not an install command and `package leaflet`/`package insert` are not install targets |
 | `hard-deny.config-modify` | G | modify configuration (including bare 配置), config files, environment, registry, HIS address or logs; after `配置`, only the same multi-character medication tokens as read-sensitive are excluded, so prepared-medication forms remain `unknown` while `配置液`/`配置药` remain app-config modifications, and other drug names such as `阿司匹林`, `二甲双胍` or `布洛芬` can still be denied; clinical log compounds use the same fixed lookbehinds; English verbs and targets are word-bounded, so `logfile` matches while "The updated configuration is ready" and "Please review the changed configuration" do not match their base verbs; the English branch requires an English verb, so `modify logs` and `modify logfile` deny while mixed-language `修改 logs` is not matched by this source |
-| `hard-deny.service-ops` | G | destructive verbs (`重启`/`启动`/`停止`/`关闭`/`杀掉`) on services, processes, the DSH host, or bare `系统` directly after the verb (optionally after an ops quantifier) when followed by end of message, punctuation, a particle, a conjunction, or an ops qualifier (with optional whitespace); diagnostic/repair verbs (`排查`/`调试`/`诊断`/`修复`) only on ops-qualified system nouns (`系统故障`, `系统配置`, `操作系统`, ...); English verbs are word-bounded (`restart` excludes `restarted`, `start` excludes `startle`/`startup`, `stop` excludes `stopcock`/`stopwatch`, `kill` excludes `killer`, `fix` excludes `fixation`/`future`), a clinical-process negative lookahead after the verb excludes `restart the care process`, `restart the treatment process`, `fix the care process`, `start the care process` and `stop the disease process`, and `process` followed by the whole words `of`/`for` is planning language, while `restart the process offline` still denies because `offline` is not `of` |
+| `hard-deny.service-ops` | G | destructive verbs (`重启`/`启动`/`停止`/`关闭`/`杀掉`) on services, processes, the DSH host, or bare `系统` directly after the verb (optionally after an ops quantifier) when followed by end of message, punctuation, a particle, a conjunction, or an ops qualifier (with optional whitespace); diagnostic/repair verbs (`排查`/`调试`/`诊断`/`修复`) only on ops-qualified system nouns (`系统故障`, `系统配置`, `操作系统`, ...); English service verbs start at a word boundary and use targeted suffix guards (`restart` excludes `restarted`, `start` excludes `startle`/`startup`, `stop` excludes `stopcock`/`stopwatch`, `kill` excludes `killer`, `fix` excludes `fixation`/`fixture`); compact variants rely on verb–target adjacency, so this is not full trailing-word bounding, a clinical-process negative lookahead after the verb excludes `restart the care process`, `restart the treatment process`, `fix the care process`, `start the care process` and `stop the disease process`, and `process` followed by the whole words `of`/`for` is planning language, while `restart the process offline` still denies because `offline` is not `of` |
 
 The full sources are reproduced in the implementation plan and live in
 `rule-defaults.js`. Rule text stays intentionally conservative: it targets
@@ -150,8 +150,10 @@ because `offline` is not the word `of` (the `process` target is followed by a
 space, so its terminal boundary holds). The same compact-variant behavior
 keeps `restart the care process` and `restart the treatment process` out of
 the rule through the clinical-process negative lookahead after the verb.
-English verbs and ops targets are word-bounded, so `restarted`, `startle`,
-`stopcock`, `killer` and `fixation` are not ops verbs, and a split inside a
+English ops targets are word-bounded, while service verbs use a leading word
+boundary and targeted suffix guards, so `restarted`, `startle`, `stopcock`,
+`killer` and `fixation` are not ops verbs; compact variants rely on
+verb–target adjacency rather than full trailing-word bounding. A split inside a
 bounded target (`run the scri pt`) can miss in the compacted form, while a
 CJK-prefixed split still matches (`查看 conf ig.json`). The
 narrowed bare-`系统` branch accepts a similar coverage gap for qualified
@@ -166,18 +168,22 @@ any whitespace, including as part of a clinical compound.
 |---|---|---|
 | `fast-allow.greeting` | D | whole-message greetings (`你好`, `hello`, ...) |
 | `fast-allow.continuation` | D | whole-message acknowledgements/continuations (`好的`, `继续`, `谢谢`, `展开说说`, ...) |
-| `fast-allow.software-help` | C | whole-message software-help questions about this plugin/software/platform/PPT/version/login, anchored on either a software noun or a software action; a possessive `的` gap is rejected, and out-of-scope requests named after a generic noun fall through |
+| `fast-allow.software-help` | C | whole-message software-help questions about this plugin/software/platform/PPT/version/login, anchored on either a software noun or a software action, plus a `把`/`将` action-prefix form that is not end-anchored; a possessive `的` gap is rejected, and out-of-scope requests named after a generic noun fall through |
 
 Greetings and continuations are whole-message anchored so that
-"好的，我头疼吃什么药" is not fast-allowed. Software-help has two shapes:
-noun-anchored questions ("这个插件怎么用", "这个软件怎么下载") and
-whole-message action-anchored queries ("怎么更新", "怎么安装",
-"如何把文件导出"). The noun-anchored rules are whole-message anchored, require
+"好的，我头疼吃什么药" is not fast-allowed. Software-help has three shapes:
+noun-anchored whole-message questions ("这个插件怎么用", "这个软件怎么下载"),
+whole-message action-anchored queries ("怎么更新", "怎么安装"), and a
+`把`/`将` action-prefix form ("如何把文件导出") that starts with the question
+word and is not end-anchored. The noun-anchored rules are whole-message
+anchored, require
 a software noun and an allowed software action (`用`, `使用`, `下载`, `安装`,
 `更新`, `升级`, `登录`, `导出`, `预览`, `生成`, `打开`, `设置`, `配置`,
 `操作`, `注册`, `找回密码`), and reject a possessive `的` gap between the
 noun and the question word. The action-anchored rules are also whole-message
-anchored and use their own action lists. Out-of-scope requests named after a
+anchored and use their own action lists; the `把`/`将` prefix rule is not
+end-anchored and excludes `系统`/`功能` directly after the particle.
+Out-of-scope requests named after a
 generic noun therefore fall through to the classifier: "这个版本的游戏怎么
 下载", "这个平台怎么贷款", "这个页面怎么买彩票", "这个软件怎么炒股" and
 "这个软件怎么下载电影" are `unknown`. Action-anchored forms may be nounless,
