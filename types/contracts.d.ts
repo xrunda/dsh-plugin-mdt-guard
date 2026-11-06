@@ -38,5 +38,5 @@ export interface ConfigProvider<TConfig> {
 }
 
 export interface AuditWriter<TEvent> {
-  write(event: TEvent): Promise<void>;
+  write(event: TEvent, context?: { messageText?: string }): Promise<void>;
 }

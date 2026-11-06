@@ -312,6 +312,22 @@ test('plugin exceptions are audited as degraded and fail open', async () => {
   assert.equal(events[0].source, 'degraded');
 });
 
+test('missing input fails open as degraded instead of throwing', async () => {
+  const { gate, events } = gateFor();
+
+  for (const malformedInput of [undefined, null]) {
+    const result = await gate.evaluate(malformedInput);
+
+    assert.equal(result.kind, 'enter');
+    assert.equal(result.decision, 'unknown');
+    assert.equal(result.degraded, true);
+    assert.equal(result.errorCode, 'GATE_ERROR');
+    assert.equal(result.sessionState, 'unknown');
+  }
+  assert.equal(events.length, 2);
+  assert.equal(events[0].source, 'degraded');
+});
+
 test('each new message is evaluated against the latest session state', async () => {
   const { classifier, calls } = classifierReturning({
     decision: 'allow', category: 'C', reason: 'software help', confidence: 0.8,

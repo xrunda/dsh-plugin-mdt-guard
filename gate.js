@@ -97,6 +97,7 @@ export function createGate({
     errorCode,
     source,
     sessionState,
+    messageText,
   }) => {
     const durationMs = Math.max(0, Date.now() - started);
     const result = Object.freeze({
@@ -131,7 +132,7 @@ export function createGate({
           errorCode: errorCode ?? null,
           sessionState,
           durationMs,
-        });
+        }, { messageText });
       } catch {
         // Audit failure must not change the gate decision.
       }
@@ -144,6 +145,7 @@ export function createGate({
     const started = Date.now();
     const sessionId = input?.sessionId;
     const turn = input?.turn;
+    const messageText = input?.currentMessage;
 
     try {
       const currentState = sessionStore.get(sessionId);
@@ -168,6 +170,7 @@ export function createGate({
           errorCode: null,
           source: ruleResult.decision === 'deny' ? 'hard_deny' : 'fast_allow',
           sessionState: effective.state,
+          messageText,
         });
       }
 
@@ -218,6 +221,7 @@ export function createGate({
         errorCode: normalized.errorCode,
         source: normalized.degraded ? 'degraded' : 'classifier',
         sessionState: effective.state,
+        messageText,
       });
     } catch {
       let sessionState = 'unknown';
@@ -241,6 +245,7 @@ export function createGate({
         errorCode: GATE_ERROR_CODES.GATE_ERROR,
         source: 'degraded',
         sessionState,
+        messageText,
       });
     }
   }
