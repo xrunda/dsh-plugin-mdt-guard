@@ -40,11 +40,11 @@ install -m 0600 /opt/dsh-mdt-guard/Docs/guard.example.json "$HOME/.dsh/mdt/guard
 node --test
 ```
 
-在 Node.js 24.13.0 下全量 187 个测试通过，无运行时依赖。
+在 Node.js 24.13.0 下全量 192 个测试通过，无运行时依赖。
 
 ## 上线边界
 
-- 固定拒答文案由门禁生成，但 DSH 默认 Web Chat 不渲染 blocked turn，用户可能只看到“无回答”；见 [#6](https://github.com/xrunda/dsh-plugin-mdt-guard/issues/6)。
+- 固定拒答文案的 Web 客户端半边已按 rc.5 契约实现：仅对被门禁结束的 `blocked` 轮次显示提示条，不生成模型消息；本地契约测试通过，但尚未在目标 Web 构建加载验证。CLI 不加载客户端插件，桌面端未验证；任意 `agent/pre-step` 的其他 reject 也会触发该文案。见 [M1 固定拒答提示条](Docs/M1-refusal-notice.md) 与 [#6](https://github.com/xrunda/dsh-plugin-mdt-guard/issues/6)。
 - 被拒绝的输入不会写入 DSH 会话历史，与 PRD FR-5 的留存表述不同。
 - 工具限制已按会话通过 `agent.ctx.tools.restrict` 安装。默认 `tools.allow` 为空，即**不保留任何继承的全局工具**（`tools.mode: ptc` 下保留的 `run_code` 传输除外）；必须先在目标环境确认实际工具名再写入白名单。
 - 文件路径边界已在 Host 侧通过 `ctx.tools.guard` 安装：已注册文件工具的路径参数只允许会话工作区，相对路径按当前有效工作目录解析、按工作区检查；`sandbox.denyPaths`（默认 `~/.dsh`、`/root`）始终拒绝，覆盖 `..` 穿越与符号链接逃逸。shell 工具的路径访问仍依赖 `tools.allow` 排除与 DSH 宿主沙箱；守卫失败时按 FR-10 放行。
@@ -59,6 +59,7 @@ node --test
 - [分类服务协议与 CA 验证（M0）](Docs/M0-classifier-protocol-validation.md)
 - [插件骨架与安装冒烟（M1）](Docs/M1-plugin-skeleton-validation.md)
 - [pre-step 适配边界（M1）](Docs/M1-pre-step-adapter.md)
+- [Web Chat 固定拒答提示条（M1）](Docs/M1-refusal-notice.md)
 - [AC-1–AC-14 验收报告（M1）](Docs/M1-acceptance-report.md)
 - [工具限制与 DSH restrict 验证（M3）](Docs/M3-tool-restriction.md)
 - [文件路径边界与 DSH 沙箱验证（M3）](Docs/M3-file-boundaries.md)

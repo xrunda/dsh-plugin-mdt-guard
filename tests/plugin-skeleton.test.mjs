@@ -60,6 +60,9 @@ test('package manifest defines the private ESM bundle contract', async () => {
 
   assert.equal(manifest.exports?.['./config'], './config.js');
   assert.equal(manifest.exports?.['./rules'], './rules.js');
+  assert.equal(manifest.exports?.['./client'], './client.js');
+  assert.equal(manifest.dsh?.client?.platform, 'web');
+  assert.deepEqual(manifest.dsh?.client?.inject, ['@deepseek-ai/dsh-client-ui-chat']);
   // rule-defaults.js is a transitive import of both config.js and rules.js,
   // so it must ship.
   for (const requiredPath of [
@@ -69,6 +72,7 @@ test('package manifest defines the private ESM bundle contract', async () => {
     'pre-step.js',
     'tool-policy.js',
     'sandbox-guard.js',
+    'client.js',
   ]) {
     assert.ok(files.includes(requiredPath), `files must include ${requiredPath}`);
   }

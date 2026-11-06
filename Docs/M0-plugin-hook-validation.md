@@ -9,10 +9,10 @@
 1. DeepSeek 官方 `deepseek-ai/deepseek-harness` 仓库在 `dsh-v0.2.1-rc.3` 和 `dsh-v0.2.1-rc.5` 均包含 `agent/pre-step` waterfall。拒绝决策会在 `step/start` 之前结束本轮，并以 `turn/end` 的 `blocked` 原因收尾。
 2. 官方回归测试为 reject 路径配置空 `MockAdapter`，并断言模型请求数、持久化 `user/message` 数和 `step/start` 数均为 0。该测试源码已核对，但本次没有安装 DSH monorepo 依赖并执行该测试；这不是医院环境的运行证据。
 3. 需要注意一个产品行为差异：reject 会领取并移出待处理输入，官方测试断言没有 `user/message` 写入会话历史；这与 PRD FR-5「用户消息保留在会话中」不一致。
-4. 官方 Web Chat 的默认 `turn-error` 渲染器明确不为 `blocked` 创建 failure row；本次没有找到默认固定拒答文案的证据。Web Chat 有 `conversation.chat.turnTail` 扩展槽，但它的 owner props 只有 turn、seq、openFile，不直接包含结束原因。能否通过受支持的客户端接口仅对 blocked turn 显示固定拒答，尚未验证。
+4. 官方 Web Chat 的默认 `turn-error` 渲染器明确不为 `blocked` 创建 failure row；本次没有找到默认固定拒答文案的证据。Web Chat 有 `conversation.chat.turnTail` 扩展槽，其 `turn` owner prop 为 `TurnLocation`；后续在已安装的 rc.5 类型上确认 `turn.end.data.reason.kind` 可用于只识别 blocked turn，并已据此实现客户端提示条（见 [M1 固定拒答提示条](M1-refusal-notice.md)）。医院构建是否加载该客户端插件仍需部署验证。
 5. 公开资料能验证 Host 插件的 bundle/patch 机制和 profile 安装模型，但不能证明医院实际 profile、web/桌面部署拓扑或所有入口均经过该 Host。以上需在医院目标环境实测。
 
-因此，**代码层面可确认 `agent/pre-step` 可用于阻止模型请求；issue #1 的拒答可见性、输入留存和医院部署验收尚未完成**。在上述 UX 差异有明确决定、医院环境证据补齐前，不应将本报告视为 v0.1 可上线结论。
+因此，**代码层面可确认 `agent/pre-step` 可用于阻止模型请求；Web Chat 固定拒答已实现客户端半边并通过本地契约测试，但输入留存与医院部署验收尚未完成**。在被拒输入的 UX 差异有明确决定、医院环境证据补齐前，不应将本报告视为 v0.1 可上线结论。
 
 ## 验证环境与版本
 
@@ -61,7 +61,7 @@
 
 - reject 路径会先 `inbox.claim(...)`，再以 `blocked` 结束 turn。官方 reject 用例没有 `user/message` 写入，也没有 `step/start`。因此 DSH 核心会话历史不会保留被拒输入；PRD FR-5 的输入留存要求需要调整实现方案或明确产品决定。
 - Web Chat 的 `turn-error.ts` 对 error、部分 aborted 与 interrupted 生成 failure row；默认分支将 `blocked` 与 completed、max-tokens 等一并排除。因此 `turn/end { reason: blocked }` 本身不等于固定拒答文案。
-- `turn-tail` 会为 `turn/end` 构建 turn-tail 节点；当没有 assistant closing 时，`TurnTailNodeView` 仍会尝试渲染 `conversation.chat.turnTail` 槽。但 `TurnTailOwnerProps` 仅包含 `turn`、`seq`、`openFile`，没有结束原因。该槽说明客户端扩展点存在，不证明插件能以受支持方式仅识别 blocked turn，也不证明医院 web/桌面包已加载该插件。
+- `turn-tail` 会为 `turn/end` 构建 turn-tail 节点；当没有 assistant closing 时，`TurnTailNodeView` 仍会尝试渲染 `conversation.chat.turnTail` 槽。`TurnTailOwnerProps` 为 `{ turn, seq, openFile }`，其中 `turn` 是 `TurnLocation`，其 `end` 字段为 `SessionEvent<'turn/end'> | undefined`，`end.data.reason` 即 `TurnEndReason`。因此在已安装的 rc.5 类型上，插件可按 `turn.end.data.reason.kind === 'blocked'` 只识别被拒轮次，无需伪造消息。该结论仍不证明医院 web/桌面包加载了本插件，实现与限制见 [M1 固定拒答提示条](M1-refusal-notice.md)。
 
 相关来源：
 
@@ -71,7 +71,7 @@
 - [TurnTail 槽 owner props](https://github.com/deepseek-ai/deepseek-harness/blob/1f81c047fc48fa190a683e469daa699857e9afe8/packages/client/ui-chat/src/client/contract/slots.ts#L55-L60)
 - [UI 插件注册方式与 slot 查询指引](https://github.com/deepseek-ai/deepseek-harness/blob/1f81c047fc48fa190a683e469daa699857e9afe8/packages/preset/agent-preset/skills/cordis-plugin-development/references/ui-plugin.md#L1-L13)
 
-**拒答呈现建议：** 目前不建议仅凭 `blocked` 事件或 slot 存在就选定客户端提示条方案；也没有证据支持通过伪造 `assistant/message` 实现固定拒答。M0 后续需在目标 DSH build 中验证一个只针对 blocked turn、不会生成模型输出且用户可见的呈现路径，并同时决定被拒输入是否应保留在 transcript。
+**拒答呈现结论（本地已实现客户端半边）：** 已采用客户端提示条方案：`client.js` 在 `conversation.chat.turnTail` 中按 `blocked` 结束原因显示固定文案，不伪造 `assistant/message`、不生成模型输出。医院 Web 构建的加载与实际显示仍需 #16 验证；CLI/桌面端没有该提示条。被拒输入是否保留在 transcript 仍是独立的产品决定。
 
 ## 版本与验收矩阵
 
@@ -82,8 +82,8 @@
 | `{ kind: 'reject' }` | 返回前置 hook 的拒绝结果 | 对应 core 文件与 rc.3 相同 | 公开源码已确认 |
 | reject 不进入 step/模型请求 | 官方测试断言 requests、step/start 均为 0 | 对应测试文件与 rc.3 相同 | 测试源码已确认；本次未执行，医院网关计数待验证 |
 | reject 输入保留在 session | 测试断言没有 `user/message` | 同 rc.3 | **与 PRD FR-5 不一致** |
-| 默认 Web 固定拒答 | blocked 不创建 failure row；无固定文案证据 | 对应 UI 文件与 rc.3 相同 | 默认 UI 不满足固定文案验收 |
-| blocked 专属 Client 提示条 | slot 存在，但 owner props 无 reason | 同 rc.3 | 需目标 Client API/运行时验证 |
+| 默认 Web 固定拒答 | blocked 不创建 failure row | rc.5 包内类型确认 `turn.end.data.reason` 可用 | 默认 UI 不显示；已实现客户端半边（仅 Web，目标构建未验证） |
+| blocked 专属 Client 提示条 | slot 存在，但 owner props 无 reason | `TurnLocation.end` 携带 `turn/end` 原因 | 本地插件已实现；医院构建加载待验证 |
 | 医院 web/桌面入口不可绕过 | 未验证 | 未验证 | 需医院部署测试 |
 
 ## 可复现的源码检查
@@ -115,7 +115,7 @@ gh api 'repos/deepseek-ai/deepseek-harness/contents/packages/client/ui-chat/src/
 - [ ] 确认医院实际 DSH build/tag、profile 绑定方式及 web/桌面 Host 拓扑。
 - [ ] 在医院批准的测试 profile 安装 Host bundle，确认服务端 listener 已加载；切换浏览器客户端后仍走同一门禁。
 - [ ] 对一条明确拒绝的测试请求同时记录 DSH hook 决策和上游模型网关请求计数/日志，证明模型未被调用。
-- [ ] 验证用户能看到完全匹配 PRD 的固定拒答文案，且该文案不是模型生成；分别检查 web 与桌面客户端。
+- [ ] 验证 Web 与桌面客户端能看到完全匹配 PRD 的固定拒答文案，且该文案不是模型生成；确认目标构建加载了本插件客户端半边。
 - [ ] 决定被拒输入的历史留存策略，并验证最终行为符合批准后的 FR-5；当前核心实现不会写入 `user/message`。
 - [ ] 验证普通会话入口、恢复会话和其他实际客户端都无法绕过 Host 门禁；记录未覆盖的入口。
 - [ ] 记录失败/阻塞项及责任方；不要把源码检查或 mock 断言写成医院环境通过。
