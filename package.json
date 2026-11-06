@@ -20,6 +20,7 @@
     "classifier-context.js",
     "classifier-client.js",
     "gate.js",
+    "audit-log.js",
     "types/contracts.d.ts",
     "locale/en.json",
     "locale/zh.json",

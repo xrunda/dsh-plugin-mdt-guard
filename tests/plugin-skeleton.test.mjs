@@ -162,7 +162,7 @@ test('declaration file includes the approved structural contracts', async () => 
       load(): Promise<TConfig>;
     }`,
     `export interface AuditWriter<TEvent> {
-      write(event: TEvent): Promise<void>;
+      write(event: TEvent, context?: { messageText?: string }): Promise<void>;
     }`,
   ]) {
     assert.ok(
