@@ -68,6 +68,7 @@ test('package manifest defines the private ESM bundle contract', async () => {
     'rule-defaults.js',
     'pre-step.js',
     'tool-policy.js',
+    'sandbox-guard.js',
   ]) {
     assert.ok(files.includes(requiredPath), `files must include ${requiredPath}`);
   }
@@ -130,7 +131,12 @@ test('localized metadata and package icon are present and local', async () => {
 test('plugin entry declares host services and registers its listeners', async () => {
   const plugin = await import('../index.js');
   const registrations = [];
-  const disposer = () => {};
+  const guards = [];
+  let listenerDisposals = 0;
+  let guardDisposals = 0;
+  const disposer = () => {
+    listenerDisposals += 1;
+  };
   const config = new Proxy({}, {
     get(_target, property) {
       throw new Error(`unexpected config access: ${String(property)}`);
@@ -138,7 +144,15 @@ test('plugin entry declares host services and registers its listeners', async ()
   });
   const context = {
     agents: { list: () => [] },
-    tools: { schemas: () => [] },
+    tools: {
+      schemas: () => [],
+      guard(guard) {
+        guards.push(guard);
+        return () => {
+          guardDisposals += 1;
+        };
+      },
+    },
     logger: { warn() {} },
     on(event, listener) {
       registrations.push({ event, listener });
@@ -148,7 +162,9 @@ test('plugin entry declares host services and registers its listeners', async ()
 
   assert.equal(typeof plugin.apply, 'function');
   assert.deepEqual(plugin.inject, ['agents', 'tools']);
-  assert.equal(plugin.apply(context, config), disposer);
+  const pluginDisposer = plugin.apply(context, config);
+  assert.equal(guards.length, 1, 'the file path guard must be registered');
+  assert.equal(guards[0]({}), undefined, 'the guard fails open without host state');
   assert.deepEqual(
     registrations.map(({ event }) => event),
     ['agent/pre-step', 'agent/created'],
@@ -156,6 +172,11 @@ test('plugin entry declares host services and registers its listeners', async ()
   for (const { listener } of registrations) {
     assert.equal(typeof listener, 'function');
   }
+
+  assert.equal(typeof pluginDisposer, 'function');
+  pluginDisposer();
+  assert.equal(listenerDisposals, 1);
+  assert.equal(guardDisposals, 1);
 });
 
 test('plugin restricts existing and newly created agents from server configuration', async (t) => {

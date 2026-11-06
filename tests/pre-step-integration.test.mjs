@@ -53,7 +53,7 @@ function hostContext() {
     warnings,
     ctx: {
       agents: { list: () => [] },
-      tools: { schemas: () => [] },
+      tools: { schemas: () => [], guard: () => () => {} },
       on(event, listener) {
         listeners.push({ event, listener });
         return () => {};

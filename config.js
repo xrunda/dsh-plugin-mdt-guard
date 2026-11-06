@@ -33,6 +33,8 @@ const DEFAULT_AUDIT_ENABLED = true;
 const DEFAULT_AUDIT_STORE_TEXT = false;
 const DEFAULT_AUDIT_RETENTION_DAYS = 30;
 const DEFAULT_TOOLS_ENFORCE = true;
+const DEFAULT_SANDBOX_ENFORCE = true;
+const DEFAULT_SANDBOX_DENY_PATHS = ['~/.dsh', '/root'];
 
 const TOP_LEVEL_KEYS = new Set([
   'enabled',
@@ -44,6 +46,7 @@ const TOP_LEVEL_KEYS = new Set([
   'refusalText',
   'audit',
   'tools',
+  'sandbox',
 ]);
 
 const CLASSIFIER_KEYS = new Set([
@@ -57,14 +60,16 @@ const CLASSIFIER_KEYS = new Set([
 
 const AUDIT_KEYS = new Set(['enabled', 'storeText', 'retentionDays']);
 const TOOLS_KEYS = new Set(['enforce', 'allow', 'deny']);
+const SANDBOX_KEYS = new Set(['enforce', 'denyPaths']);
 
 const NESTED_KEYS = {
   classifier: CLASSIFIER_KEYS,
   audit: AUDIT_KEYS,
   tools: TOOLS_KEYS,
+  sandbox: SANDBOX_KEYS,
 };
 
-const NESTED_SECTIONS = ['classifier', 'audit', 'tools'];
+const NESTED_SECTIONS = ['classifier', 'audit', 'tools', 'sandbox'];
 
 const INTEGER_BOUNDS = {
   'classifier.timeoutMs': [100, 60000],
@@ -384,6 +389,22 @@ export function validateConfig(input) {
     }
   }
 
+  const sandbox = {
+    enforce: DEFAULT_SANDBOX_ENFORCE,
+    denyPaths: [...DEFAULT_SANDBOX_DENY_PATHS],
+  };
+  const suppliedSandbox = input.sandbox;
+  if (suppliedSandbox !== undefined) {
+    if (suppliedSandbox.enforce !== undefined) {
+      requireBoolean(suppliedSandbox.enforce, 'sandbox.enforce');
+      sandbox.enforce = suppliedSandbox.enforce;
+    }
+    if (suppliedSandbox.denyPaths !== undefined) {
+      requireStringArray(suppliedSandbox.denyPaths, 'sandbox.denyPaths');
+      sandbox.denyPaths = [...suppliedSandbox.denyPaths];
+    }
+  }
+
   if (enabled === true) {
     if (classifier.baseUrl === undefined) {
       fail(CONFIG_FIELD_REQUIRED, 'classifier.baseUrl');
@@ -403,6 +424,7 @@ export function validateConfig(input) {
     refusalText,
     audit,
     tools,
+    sandbox,
   };
 }
 
