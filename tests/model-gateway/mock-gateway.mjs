@@ -46,13 +46,14 @@ export async function createMockGateway({
   serverCertPath,
   mode = 'success',
   delayMs = 3500,
+  result = classifierResult,
 }) {
   const key = serverKeyPath ?? keyPath;
   const cert = serverCertPath ?? certPath;
   if (!key || !cert) {
     throw new Error('Mock HTTPS gateway requires a test server key and certificate.');
   }
-  if (!['success', 'malformed', 'delay'].includes(mode)) {
+  if (!['success', 'malformed', 'missing-fields', 'delay'].includes(mode)) {
     throw new Error(`Unsupported mock gateway mode: ${mode}`);
   }
 
@@ -112,7 +113,9 @@ export async function createMockGateway({
 
     const content = mode === 'malformed'
       ? '{not-json'
-      : JSON.stringify(classifierResult);
+      : mode === 'missing-fields'
+        ? JSON.stringify({ decision: 'allow' })
+        : JSON.stringify(result);
     const envelope = {
       choices: [{ message: { role: 'assistant', content } }],
     };

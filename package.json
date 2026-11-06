@@ -18,6 +18,7 @@
     "rule-defaults.js",
     "session-state.js",
     "classifier-context.js",
+    "classifier-client.js",
     "types/contracts.d.ts",
     "locale/en.json",
     "locale/zh.json",
