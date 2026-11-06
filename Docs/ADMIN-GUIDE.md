@@ -161,10 +161,10 @@ install -m 0600 /opt/dsh-mdt-guard/Docs/guard.example.json "$HOME/.dsh/mdt/guard
 | `classifier.timeoutMs` | `1500` | 连接、TLS、响应头和响应体合计超时；范围 100–60000。超时按分类失败处理。 |
 | `classifier.maxTokens` | `200` | 分类请求输出上限；范围 1–4096。 |
 | `contextTurns` | `3` | 上送分类器的最近轮数；范围 0–20。`0` 表示只送当前消息。 |
-| `failOpen` | `true` | 分类失败/未知时放行。`false` 时拒绝，但拒答文案可见性仍受第 8 节限制。 |
+| `failOpen` | `true` | 分类失败/未知时放行。`false` 时拒绝；Web 客户端半边在目标构建加载后会为 `blocked` 轮次显示固定提示条，CLI/桌面端未验证。 |
 | `hardDeny` | 内置 12 条 | 硬拒绝正则源码数组。空数组使用内置规则；非空数组**整体替换**内置规则。 |
 | `fastAllow` | 内置 7 条 | 快速放行正则源码数组。空数组使用内置规则；非空数组**整体替换**内置规则。 |
-| `refusalText` | 固定文案 | 门禁结果中的拒答文案；当前默认 Web Chat 不渲染该文案。 |
+| `refusalText` | 固定文案 | 门禁结果中的拒答文案。Web Chat 客户端提示条当前固定显示默认文案，不随此字段变化；CLI 不加载客户端插件，桌面端未验证。 |
 | `audit.enabled` | `true` | 是否写审计。`false` 时门禁仍生效，但不留判定记录。 |
 | `audit.storeText` | `false` | 是否保存用户原文。开启后审计文件会含患者/业务原文，必须评估隐私与合规风险。 |
 | `audit.retentionDays` | `30` | 保留天数；范围 1–3650。按 UTC 日期文件名清理。 |
@@ -271,7 +271,7 @@ Authorization: Bearer <apiKey>   # 仅在配置时
 node --test
 ```
 
-在 Node.js 24.13.0 下全量 187 个测试通过，包括 AC-1–AC-13、AC-14 等价服务端入口以及工具限制与文件路径边界的本地回归。该结果不替代医院真实环境验收；其他 Node 版本需先运行测试，证书相关用例依赖 Node 的 TLS/OpenSSL 支持。
+在 Node.js 24.13.0 下全量 192 个测试通过，包括 AC-1–AC-13、AC-14 等价服务端入口、工具限制、文件路径边界与 Web 客户端提示条契约的本地回归。该结果不替代医院真实环境验收；其他 Node 版本需先运行测试，证书相关用例依赖 Node 的 TLS/OpenSSL 支持。
 
 ### 5.2 检查配置能否解析
 
@@ -362,7 +362,7 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 | 分类请求返回 401/403 | 令牌缺失、过期或无权限 | 更新 `classifier.apiKey`，不要打印或提交令牌 |
 | 审计文件不生成 | 审计被关闭、`HOME` 不对、目录不可写、写入失败被吞 | 检查 `audit.enabled`、进程 `HOME`、磁盘与目录权限 |
 | 拒绝范围过宽/过窄 | 自定义 `hardDeny`/`fastAllow` 整体替换了内置规则 | 用审计 `ruleId` 定位；先在测试 profile 调整 |
-| 用户被拒绝但看不到固定文案 | DSH 默认 Web Chat 不渲染 blocked turn | 当前已知限制，见第 8 节；不要宣称已满足固定拒答 |
+| 用户被拒绝但看不到固定文案 | CLI/桌面端不加载客户端插件，或医院 Web 构建未加载；自定义 `refusalText` 也不会反映到提示条 | 确认 Web 端加载了客户端半边；见第 8 节与 [M1 固定拒答提示条](M1-refusal-notice.md) |
 | profile 中出现两条插件记录 | 同时使用了包内 patch 与 `--patch` 叠加 | 移除重复层，只用 `dsh plugin` 安装 |
 
 配置错误会保持门禁停用（fail-open），不会阻断 DSH 会话。告警通过 Host 的 `logger` 输出；若目标 Host 没有提供 `logger`，只能观察到门禁未生效。修正配置后必须重启 Host。
@@ -378,11 +378,12 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 - 自定义 CA；TLS 校验始终开启；无重试。
 - 工具限制按 agent 安装：默认 `allow=[]` 拒绝全部继承的全局工具，`deny` 优先，不可作为限制目标的名称会触发默认拒绝降级。
 - 文件路径守卫：文件工具只能访问当前会话工作区；`~/.dsh`、`/root` 等保护前缀始终拒绝；覆盖 `..` 穿越与符号链接逃逸。
+- Web Chat 固定拒答提示条：客户端半边按 rc.5 契约注册到 `conversation.chat.turnTail`，只在轮次结束原因为 `blocked` 时显示固定文案，不生成模型消息，不影响门禁判定。本地契约测试通过，目标 Web 构建是否加载尚未验证；其他 `agent/pre-step` 的 reject 也会触发同一文案。
 - 配置/规则/分类错误信息不包含用户原文或配置值。
 
 ### 8.2 尚未实现或未验证
 
-- **固定拒答文案不可见。** DSH 默认 Web Chat 不为 `blocked` 生成 failure row；当前只能阻断本轮，用户可能看到“消息已发送但无回答”。这是发布阻断项，见 #6。
+- **固定拒答只在 Web Chat 实现，且未在目标构建验证。** 客户端半边通过 `conversation.chat.turnTail` 识别 `blocked` 轮次并显示固定文案；CLI 不加载客户端插件，桌面端与医院 Web 构建是否加载、slot 名称是否一致均未验证。自定义 `refusalText` 也不会同步到提示条。`blocked` 没有拒绝来源字段，其他 `agent/pre-step` 的 reject 也会显示该文案。
 - **被拒输入不进入会话历史。** Host 在 reject 前领取输入，官方行为不写 `user/message`，与 PRD FR-5 不一致。
 - **工具名与真实 profile 未验收。** 默认 `allow=[]` 的安全语义已由本地测试覆盖，但目标医院 profile 实际注册了哪些工具、web/桌面/CLI 是否得到相同工具集，必须在 #16 的医院环境确认；不能把本地测试当作医院工具矩阵。
 - **工具限制失败时的边界。** 配置/schema 不可用时不安装限制（fail-open）；过滤被 Host 拒绝时降级为拒绝全部继承工具；降级也失败时才完全 fail-open。三种情况都只能依赖 Host 日志中的固定告警发现。
@@ -400,7 +401,7 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 - 配置文件按 `0600` 管理，备份加密，禁止放入 Git、工单或聊天记录。
 - `audit.storeText` 默认关闭；开启前完成隐私影响评估，并限制审计目录访问。
 - 审计保留期按医院制度设置；清理会删除审计目录中任何匹配 `YYYY-MM-DD.jsonl` 且早于保留期的文件，不要把外部归档放在同一目录。
-- `failOpen=false` 会在分类故障时拒绝，但在固定拒答不可见前可能导致用户无反馈；是否启用需业务与信息科共同决定。
+- `failOpen=false` 会在分类故障时拒绝；目标 Web 构建加载客户端半边后会显示固定提示条，但 CLI/桌面端可能无反馈，是否启用需业务与信息科共同决定。
 - 本插件是话题门禁，不是 DLP、患者隐私分类器或合规审计系统，不能替代医院既有安全控制。
 
 ## 9. 升级与回滚
@@ -422,7 +423,7 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 以下项目必须在医院目标 DSH 版本和实际部署拓扑中完成，不能以本文档或本地测试替代：
 
 - profile 安装、服务端 listener 实际执行、web/桌面/CLI 入口一致性；
-- 固定拒答文案在目标客户端的可见性，以及被拒输入的留存决定；
+- 固定拒答提示条在目标 Web 构建的加载与显示、CLI/桌面端表现，以及被拒输入的留存决定；
 - 院内分类器的 A–I 判定准确率、延迟、超时与自定义 CA/代理连通性；
 - 拒绝轮次在上游回答模型网关侧无请求记录；
 - 目标 profile 的实际工具名、`tools.allow/deny` 配置结果，以及 web/桌面/CLI 的允许/拒绝集合是否一致（#12/#16）；
@@ -430,4 +431,4 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 - 审计目录、权限、保留期与导出流程的信息科确认；
 - 记录测试版本、拓扑、证据、未通过项、负责人和后续 issue。
 
-相关背景与证据见 [M0 扩展点验证](M0-plugin-hook-validation.md)、[M0 分类服务协议与 CA 验证](M0-classifier-protocol-validation.md)、[M1 插件骨架与安装冒烟](M1-plugin-skeleton-validation.md)、[pre-step 适配边界](M1-pre-step-adapter.md)、[AC-1–AC-14 验收报告](M1-acceptance-report.md)、[M3 工具限制验证](M3-tool-restriction.md) 与 [M3 文件路径边界验证](M3-file-boundaries.md)。
+相关背景与证据见 [M0 扩展点验证](M0-plugin-hook-validation.md)、[M0 分类服务协议与 CA 验证](M0-classifier-protocol-validation.md)、[M1 插件骨架与安装冒烟](M1-plugin-skeleton-validation.md)、[pre-step 适配边界](M1-pre-step-adapter.md)、[Web Chat 固定拒答提示条](M1-refusal-notice.md)、[AC-1–AC-14 验收报告](M1-acceptance-report.md)、[M3 工具限制验证](M3-tool-restriction.md) 与 [M3 文件路径边界验证](M3-file-boundaries.md)。

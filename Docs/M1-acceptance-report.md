@@ -42,11 +42,11 @@ node --test
 - 审计：每个测试使用独立临时目录，按真实 JSONL 写入后回读断言。
 - 宿主：以 `createPreStepHandler` 和可计数 `next()` 模拟 DSH 的 `agent/pre-step` 契约，不使用真实 DSH Host。
 - 客户端：AC-14 只验证两个会话的等价服务端 payload 都经过同一 listener，没有引入浏览器/CLI 的入口或来源差异；真实客户端切换未在本机验证。
-- 固定文案：gate 结果包含 PRD 固定拒答文案，但 DSH 默认 Web Chat 不渲染 blocked turn，用户可见性仍受 #6 限制。
+- 固定文案：gate 结果包含 PRD 固定拒答文案；Web Chat 客户端半边已按 rc.5 契约实现并通过本地契约测试，目标构建加载与显示仍未验证，任意 `agent/pre-step` 的 reject 都会触发该文案。
 
 ## 仍未验证
 
 1. 医院实际 DSH profile、web/桌面/CLI 拓扑下 `source.kind === 'user'` 的入口完整性。
-2. 默认客户端对 `{kind:'reject'}` 的可见反馈与输入留存，见 #6。
+2. 默认客户端的可见反馈与输入留存：Web Chat 提示条已在本地实现，CLI/桌面端与医院 Web 构建未验证，见 #6。
 3. 上游模型网关侧请求日志与审计记录的联合核对（本套件仅以 `next()` 零调用证明未进入宿主回答 step，不能替代网关日志）。
 4. 院内分类器对 AC-4/AC-5/AC-8 自然语言样本的实际分类结果与置信度。

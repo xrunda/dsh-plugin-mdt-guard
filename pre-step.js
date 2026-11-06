@@ -7,10 +7,11 @@
  * decision so the loop ends before any model request.
  *
  * DSH `PreStepDecision` has no field for refusal text, and the default Web
- * Chat does not render blocked turns as an error row. Therefore this adapter
- * blocks the turn but cannot itself display `config.refusalText`; a
- * host-supported blocked-turn presentation remains an unresolved adapter
- * boundary. See Docs/M0-plugin-hook-validation.md.
+ * Chat does not render blocked turns as an error row. The package's client
+ * half (`client.js`) fills that gap for Web Chat by rendering the fixed notice
+ * on `conversation.chat.turnTail` when the turn ended as `blocked`. Hosts that
+ * do not load client plugins (such as the CLI) still block the turn but cannot
+ * show the notice. See Docs/M1-refusal-notice.md.
  */
 
 function textOf(message) {

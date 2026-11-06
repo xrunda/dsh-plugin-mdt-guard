@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-06
 
-**结论状态：** Host 侧 `agent/pre-step` 已接入规则、分类器、会话状态与审计；拒绝可阻止模型调用。固定拒答文案的客户端呈现仍未解决，见“适配边界”。
+**结论状态：** Host 侧 `agent/pre-step` 已接入规则、分类器、会话状态与审计；拒绝可阻止模型调用。固定拒答文案的 Web 呈现已实现客户端半边并通过本地契约测试，CLI/桌面端与医院构建仍待验证，见“适配边界”。
 
 ## 实现
 
@@ -24,7 +24,7 @@
 
 ## 适配边界
 
-1. **固定拒答文案不可见。** DSH `PreStepDecision` 的 reject 分支只有 `{ kind: 'reject' }`，没有文案字段；`turn/end` 的 `blocked` 也不在默认 Web Chat 的 failure row 中。当前适配器只能阻断本轮，不能满足“固定文案可见”的验收项。结合下一条，用户看到的是“消息已发送、既无回答也无提示”的状态，这与 PRD FR-5 直接冲突，应作为发布阻断项，直到存在受支持的 blocked-turn 客户端呈现能力或在目标 DSH build 上另行验证。
+1. **固定拒答文案的呈现只覆盖 Web Chat，且未在目标构建验证。** DSH `PreStepDecision` 的 reject 分支只有 `{ kind: 'reject' }`，没有文案字段；默认 Web Chat 也不为 `blocked` 生成 failure row。本包新增的客户端半边在 `conversation.chat.turnTail` 中按 `turn.end.data.reason.kind === 'blocked'` 显示固定文案（不伪造模型消息），实现见 [M1 固定拒答提示条](M1-refusal-notice.md)。CLI 不加载客户端插件，桌面端与医院 Web 构建未验证；这些入口仍只有“拒绝、无提示”。`blocked` 没有拒绝来源字段，其他 `agent/pre-step` 的 reject 也会触发该文案。
 2. **被拒输入不进入会话历史。** Host 在 reject 前已领取输入，且官方测试断言不写 `user/message`。这与 PRD FR-5 的输入留存表述不一致，需产品决定后再调整。
 3. **绕过面已在服务端入口收窄。** 远程 prompt 路径与 ACP 路径都在服务端构造 `source: { kind: 'user' }` 并经 agent inbox 进入 `agent/pre-step`，客户端不能伪造来源或跳过 listener；但医院实际 profile、web/桌面拓扑、恢复会话和其他入口仍需实测。
 4. **配置错误停用并告警。** 配置读取/校验失败时向 Host logger 输出仅含错误码与字段名的固定告警，保持 DSH 默认行为；配置只加载一次，修正文件后需重启 Host 才生效。
