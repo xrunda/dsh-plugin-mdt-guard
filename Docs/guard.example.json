@@ -20,5 +20,9 @@
     "enforce": true,
     "allow": [],
     "deny": []
+  },
+  "sandbox": {
+    "enforce": true,
+    "denyPaths": ["~/.dsh", "/root"]
   }
 }

@@ -143,6 +143,10 @@ test('disabled configuration normalizes to the PRD defaults', () => {
       deny: [],
       enforce: true,
     },
+    sandbox: {
+      enforce: true,
+      denyPaths: ['~/.dsh', '/root'],
+    },
   });
 });
 
@@ -197,6 +201,10 @@ test('enabled configuration merges nested defaults and replaces supplied arrays'
       deny: ['unsafe-tool'],
       enforce: true,
     },
+    sandbox: {
+      enforce: true,
+      denyPaths: ['~/.dsh', '/root'],
+    },
   });
   assert.deepEqual(input, original, 'validation must not mutate its input');
 });
@@ -224,6 +232,21 @@ test('tools.enforce defaults to true and accepts an explicit opt-out', () => {
   );
 });
 
+test('sandbox defaults to enforcement with protected roots and accepts overrides', () => {
+  assert.deepEqual(validateConfig({ enabled: false }).sandbox, {
+    enforce: true,
+    denyPaths: ['~/.dsh', '/root'],
+  });
+
+  const denyPaths = ['/srv/his-certs'];
+  const result = validateConfig({
+    enabled: false,
+    sandbox: { enforce: false, denyPaths },
+  });
+  assert.deepEqual(result.sandbox, { enforce: false, denyPaths: ['/srv/his-certs'] });
+  assert.notEqual(result.sandbox.denyPaths, denyPaths);
+});
+
 test('omitted enabled defaults to true and still requires classifier connection fields', () => {
   assertConfigError({}, 'CONFIG_FIELD_REQUIRED', 'classifier.baseUrl', {
     label: 'empty input',
@@ -238,19 +261,23 @@ test('each call returns fresh normalized objects rather than shared defaults', (
   assert.notEqual(first.classifier, second.classifier);
   assert.notEqual(first.audit, second.audit);
   assert.notEqual(first.tools, second.tools);
+  assert.notEqual(first.sandbox, second.sandbox);
   assert.notEqual(first.hardDeny, second.hardDeny);
   assert.notEqual(first.fastAllow, second.fastAllow);
   assert.notEqual(first.tools.allow, second.tools.allow);
   assert.notEqual(first.tools.deny, second.tools.deny);
+  assert.notEqual(first.sandbox.denyPaths, second.sandbox.denyPaths);
 
   first.hardDeny.push('mutated-deny');
   first.fastAllow.push('mutated-allow');
   first.tools.allow.push('mutated-tool');
+  first.sandbox.denyPaths.push('/mutated-root');
   first.audit.retentionDays = 999;
 
   assert.deepEqual(second.hardDeny, [...HARD_DENY_DEFAULT_SOURCES]);
   assert.deepEqual(second.fastAllow, [...FAST_ALLOW_DEFAULT_SOURCES]);
   assert.deepEqual(second.tools.allow, []);
+  assert.deepEqual(second.sandbox.denyPaths, ['~/.dsh', '/root']);
   assert.equal(second.audit.retentionDays, 30);
 });
 
@@ -569,6 +596,9 @@ test('rejects incorrect field types and empty non-empty text fields', () => {
     [withField(['tools', 'allow'], 'tool-name'), 'tools.allow'],
     [withField(['tools', 'deny'], ['valid-tool', null]), 'tools.deny'],
     [withField(['tools', 'enforce'], 'true'), 'tools.enforce'],
+    [withField(['sandbox', 'enforce'], 'true'), 'sandbox.enforce'],
+    [withField(['sandbox', 'denyPaths'], '/root'), 'sandbox.denyPaths'],
+    [withField(['sandbox', 'denyPaths'], ['/root', null]), 'sandbox.denyPaths'],
   ];
 
   for (const [input, field] of invalidCases) {
@@ -582,6 +612,7 @@ test('rejects unknown top-level and nested keys', () => {
     [{ enabled: false, classifier: { unexpected: true } }, 'classifier.unexpected'],
     [{ enabled: false, audit: { unexpected: true } }, 'audit.unexpected'],
     [{ enabled: false, tools: { unexpected: true } }, 'tools.unexpected'],
+    [{ enabled: false, sandbox: { unexpected: true } }, 'sandbox.unexpected'],
   ]) {
     assertConfigError(input, 'CONFIG_UNKNOWN_FIELD', field, { label: field });
   }
@@ -682,6 +713,10 @@ test('loadConfig resolves the default config path from the isolated home', async
       deny: [],
       enforce: true,
     },
+    sandbox: {
+      enforce: true,
+      denyPaths: ['~/.dsh', '/root'],
+    },
   });
 });
 
@@ -777,6 +812,10 @@ test('loadConfig returns a normalized enabled configuration from disk', async (t
       deny: ['unsafe-tool'],
       enforce: true,
     },
+    sandbox: {
+      enforce: true,
+      denyPaths: ['~/.dsh', '/root'],
+    },
   });
 });
 
@@ -807,6 +846,10 @@ test('loadConfig accepts a disabled config without classifier connection fields'
       allow: [],
       deny: [],
       enforce: true,
+    },
+    sandbox: {
+      enforce: true,
+      denyPaths: ['~/.dsh', '/root'],
     },
   });
   assert.equal('baseUrl' in config.classifier, false);
@@ -917,6 +960,7 @@ test('the documented example is valid, matches the documented defaults, and cont
     ['hardDeny', normalized.hardDeny, defaults.hardDeny],
     ['fastAllow', normalized.fastAllow, defaults.fastAllow],
     ['tools', normalized.tools, defaults.tools],
+    ['sandbox', normalized.sandbox, defaults.sandbox],
   ]) {
     assert.deepEqual(actual, expected, `example ${label} drifted from the config.js default`);
   }

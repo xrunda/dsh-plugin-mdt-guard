@@ -4,6 +4,7 @@ import { loadConfig } from './config.js';
 import { createGate } from './gate.js';
 import { createPreStepHandler } from './pre-step.js';
 import { compileRules } from './rules.js';
+import { createSandboxGuard } from './sandbox-guard.js';
 import {
   TOOL_RESTRICT_DENY_ALL,
   TOOL_RESTRICT_FAILED,
@@ -61,6 +62,7 @@ function createRuntime(config) {
  */
 export function apply(ctx, _config) {
   let runtimePromise;
+  let activeConfig;
 
   const reportInactive = (error) => {
     try {
@@ -76,17 +78,63 @@ export function apply(ctx, _config) {
 
   const loadRuntime = () => {
     runtimePromise ??= loadConfig()
-      .then((config) => (
-        config.enabled
+      .then((config) => {
+        // Shared by the async pre-step gate and the synchronous tool guard.
+        // The guard fails open until this assignment completes.
+        activeConfig = config;
+        return config.enabled
           ? { config, handler: createRuntime(config) }
-          : undefined
-      ))
+          : undefined;
+      })
       .catch((error) => {
         reportInactive(error);
         return undefined;
       });
     return runtimePromise;
   };
+
+  // DSH fs tools resolve relative arguments against the session's effective
+  // working directory, which `working_directory` can change. Read it from the
+  // optional service so the guard resolves paths exactly like the tools do.
+  const getWorkingDirectory = (execution) => {
+    try {
+      const session = execution?.agent?.session;
+      if (session === undefined) return undefined;
+      return ctx.get?.('workingDirectory')?.get?.(session);
+    } catch {
+      return undefined;
+    }
+  };
+  const getWorkspaceRoot = (execution) => {
+    try {
+      const session = execution?.agent?.session;
+      if (session === undefined) return undefined;
+      return ctx.get?.('sandboxPolicy')?.resolve?.({ session })?.workspaceRoot;
+    } catch {
+      return undefined;
+    }
+  };
+
+  let sandboxGuardDisposer;
+  try {
+    sandboxGuardDisposer = ctx.tools.guard(createSandboxGuard({
+      getConfig: () => activeConfig,
+      getWorkingDirectory,
+      getWorkspaceRoot,
+    }));
+  } catch {
+    sandboxGuardDisposer = undefined;
+  }
+  if (typeof sandboxGuardDisposer !== 'function') {
+    sandboxGuardDisposer = undefined;
+    try {
+      ctx.logger?.warn(
+        'dsh-mdt-guard: file path guard unavailable; workspace boundaries are not enforced',
+      );
+    } catch {
+      // Reporting is best-effort; the gate still works without the guard.
+    }
+  }
 
   const installToolRestriction = createToolScopeInstaller({
     tools: ctx.tools,
@@ -112,5 +160,15 @@ export function apply(ctx, _config) {
   ctx.on('agent/created', async ({ agent }) => {
     await installToolRestriction(agent);
   });
-  return preStepDisposer;
+
+  if (typeof sandboxGuardDisposer !== 'function') {
+    return preStepDisposer;
+  }
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    preStepDisposer?.();
+    sandboxGuardDisposer();
+  };
 }

@@ -26,7 +26,8 @@
     "types/contracts.d.ts",
     "locale/en.json",
     "locale/zh.json",
-    "icon.svg"
+    "icon.svg",
+    "sandbox-guard.js"
   ],
   "dsh": {
     "bundle": {
