@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "MDT Topic Guard",
-    "description": "Server-side MDT topic guard for the DSH host with pre-step enforcement, classifier calls, and privacy-conscious audit records."
+    "description": "Server-side MDT topic guard for the DSH host with pre-step enforcement, classifier calls, per-session tool restrictions, and privacy-conscious audit records."
   }
 }

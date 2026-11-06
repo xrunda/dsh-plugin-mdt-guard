@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 async function readRequiredText(relativePath) {
@@ -60,7 +62,13 @@ test('package manifest defines the private ESM bundle contract', async () => {
   assert.equal(manifest.exports?.['./rules'], './rules.js');
   // rule-defaults.js is a transitive import of both config.js and rules.js,
   // so it must ship.
-  for (const requiredPath of ['config.js', 'rules.js', 'rule-defaults.js', 'pre-step.js']) {
+  for (const requiredPath of [
+    'config.js',
+    'rules.js',
+    'rule-defaults.js',
+    'pre-step.js',
+    'tool-policy.js',
+  ]) {
     assert.ok(files.includes(requiredPath), `files must include ${requiredPath}`);
   }
   for (const entry of files) {
@@ -119,7 +127,7 @@ test('localized metadata and package icon are present and local', async () => {
   );
 });
 
-test('plugin entry registers one gated pre-step listener and returns its cleanup', async () => {
+test('plugin entry declares host services and registers its listeners', async () => {
   const plugin = await import('../index.js');
   const registrations = [];
   const disposer = () => {};
@@ -129,6 +137,9 @@ test('plugin entry registers one gated pre-step listener and returns its cleanup
     },
   });
   const context = {
+    agents: { list: () => [] },
+    tools: { schemas: () => [] },
+    logger: { warn() {} },
     on(event, listener) {
       registrations.push({ event, listener });
       return disposer;
@@ -136,11 +147,88 @@ test('plugin entry registers one gated pre-step listener and returns its cleanup
   };
 
   assert.equal(typeof plugin.apply, 'function');
+  assert.deepEqual(plugin.inject, ['agents', 'tools']);
   assert.equal(plugin.apply(context, config), disposer);
-  assert.equal(registrations.length, 1);
-  assert.equal(registrations[0].event, 'agent/pre-step');
-  assert.equal(typeof registrations[0].listener, 'function');
+  assert.deepEqual(
+    registrations.map(({ event }) => event),
+    ['agent/pre-step', 'agent/created'],
+  );
+  for (const { listener } of registrations) {
+    assert.equal(typeof listener, 'function');
+  }
 });
+
+test('plugin restricts existing and newly created agents from server configuration', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-mdt-guard-tools-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const configDir = join(home, '.dsh', 'mdt');
+  await mkdir(configDir, { recursive: true });
+  await writeFile(
+    join(configDir, 'guard.json'),
+    JSON.stringify({
+      enabled: true,
+      classifier: {
+        baseUrl: 'https://classifier.example.invalid/v1',
+        model: 'mdt-classifier-example',
+      },
+      tools: { allow: ['read'], deny: ['bash'], enforce: true },
+    }),
+  );
+
+  const originalHome = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    const plugin = await import('../index.js');
+    const registrations = [];
+    const existing = makeRestrictedAgent();
+    const created = makeRestrictedAgent();
+    const context = {
+      agents: { list: () => [existing] },
+      tools: {
+        schemas: () => [{ name: 'read' }, { name: 'bash' }, { name: 'web_fetch' }],
+      },
+      logger: { warn() {} },
+      on(event, listener) {
+        registrations.push({ event, listener });
+        return () => {};
+      },
+    };
+
+    plugin.apply(context, {});
+    await waitFor(() => existing.restrictions.length === 1);
+
+    assert.deepEqual(existing.restrictions, [{ allow: ['read'], deny: ['bash'] }]);
+
+    const createdListener = registrations.find(({ event }) => event === 'agent/created');
+    await createdListener.listener({ agent: created });
+    assert.deepEqual(created.restrictions, [{ allow: ['read'], deny: ['bash'] }]);
+  } finally {
+    process.env.HOME = originalHome;
+  }
+});
+
+function makeRestrictedAgent() {
+  const restrictions = [];
+  return {
+    restrictions,
+    ctx: {
+      tools: {
+        restrict(filter) {
+          restrictions.push(filter);
+          return () => {};
+        },
+      },
+    },
+  };
+}
+
+async function waitFor(predicate) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail('timed out waiting for asynchronous plugin installation');
+}
 
 test('declaration file includes the approved structural contracts', async () => {
   const contracts = await readRequiredText('../types/contracts.d.ts');

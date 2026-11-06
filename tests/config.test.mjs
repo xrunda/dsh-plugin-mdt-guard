@@ -141,6 +141,7 @@ test('disabled configuration normalizes to the PRD defaults', () => {
     tools: {
       allow: [],
       deny: [],
+      enforce: true,
     },
   });
 });
@@ -194,6 +195,7 @@ test('enabled configuration merges nested defaults and replaces supplied arrays'
     tools: {
       allow: ['lookup', 'consult'],
       deny: ['unsafe-tool'],
+      enforce: true,
     },
   });
   assert.deepEqual(input, original, 'validation must not mutate its input');
@@ -212,6 +214,14 @@ test('non-empty tools.allow replaces defaults without mutating its input array',
   assert.deepEqual(result.tools.allow, ['tool-two', 'tool-one']);
   result.tools.allow.reverse();
   assert.deepEqual(allow, originalAllow);
+});
+
+test('tools.enforce defaults to true and accepts an explicit opt-out', () => {
+  assert.equal(validateConfig({ enabled: false }).tools.enforce, true);
+  assert.equal(
+    validateConfig({ enabled: false, tools: { enforce: false } }).tools.enforce,
+    false,
+  );
 });
 
 test('omitted enabled defaults to true and still requires classifier connection fields', () => {
@@ -558,6 +568,7 @@ test('rejects incorrect field types and empty non-empty text fields', () => {
     [withField(['audit', 'retentionDays'], '30'), 'audit.retentionDays'],
     [withField(['tools', 'allow'], 'tool-name'), 'tools.allow'],
     [withField(['tools', 'deny'], ['valid-tool', null]), 'tools.deny'],
+    [withField(['tools', 'enforce'], 'true'), 'tools.enforce'],
   ];
 
   for (const [input, field] of invalidCases) {
@@ -669,6 +680,7 @@ test('loadConfig resolves the default config path from the isolated home', async
     tools: {
       allow: [],
       deny: [],
+      enforce: true,
     },
   });
 });
@@ -763,6 +775,7 @@ test('loadConfig returns a normalized enabled configuration from disk', async (t
     tools: {
       allow: ['lookup', 'consult'],
       deny: ['unsafe-tool'],
+      enforce: true,
     },
   });
 });
@@ -793,6 +806,7 @@ test('loadConfig accepts a disabled config without classifier connection fields'
     tools: {
       allow: [],
       deny: [],
+      enforce: true,
     },
   });
   assert.equal('baseUrl' in config.classifier, false);

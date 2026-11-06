@@ -1,6 +1,6 @@
 # dsh-mdt-guard
 
-DSH Host 侧的 MDT 话题门禁插件。它在模型调用前读取 `agent/pre-step`，对用户消息执行硬规则和院内分类器判定，拒绝非 MDT 请求，并写入隐私优先的 JSONL 审计。
+DSH Host 侧的 MDT 话题门禁插件。它在模型调用前读取 `agent/pre-step`，对用户消息执行硬规则和院内分类器判定，拒绝非 MDT 请求，按会话收紧工具集，并写入隐私优先的 JSONL 审计。
 
 本插件独立安装，不修改 DSH 本体，也不修改 `dsh-plugin-hzhospital`。
 
@@ -40,13 +40,13 @@ install -m 0600 /opt/dsh-mdt-guard/Docs/guard.example.json "$HOME/.dsh/mdt/guard
 node --test
 ```
 
-在 Node.js 24.13.0 下全量 149 个测试通过，无运行时依赖。
+在 Node.js 24.13.0 下全量 163 个测试通过，无运行时依赖。
 
 ## 上线边界
 
 - 固定拒答文案由门禁生成，但 DSH 默认 Web Chat 不渲染 blocked turn，用户可能只看到“无回答”；见 [#6](https://github.com/xrunda/dsh-plugin-mdt-guard/issues/6)。
 - 被拒绝的输入不会写入 DSH 会话历史，与 PRD FR-5 的留存表述不同。
-- `tools.allow` / `tools.deny` 尚未接入 `ctx.tools.restrict`，工具与沙箱限制见 [#12](https://github.com/xrunda/dsh-plugin-mdt-guard/issues/12)、[#13](https://github.com/xrunda/dsh-plugin-mdt-guard/issues/13)。
+- 工具限制已按会话通过 `agent.ctx.tools.restrict` 安装。默认 `tools.allow` 为空，即**不保留任何继承的全局工具**（`tools.mode: ptc` 下保留的 `run_code` 传输除外）；必须先在目标环境确认实际工具名再写入白名单。沙箱文件边界仍见 [#13](https://github.com/xrunda/dsh-plugin-mdt-guard/issues/13)。
 - `guard.json` 当前未开放分类代理字段；需要代理的部署须先完成 [#16](https://github.com/xrunda/dsh-plugin-mdt-guard/issues/16) 的配置扩展与验证。
 - 真实医院 profile、web/桌面/CLI 入口、院内分类器准确率与上游网关计数必须在医院测试环境验收。
 
@@ -59,3 +59,4 @@ node --test
 - [插件骨架与安装冒烟（M1）](Docs/M1-plugin-skeleton-validation.md)
 - [pre-step 适配边界（M1）](Docs/M1-pre-step-adapter.md)
 - [AC-1–AC-14 验收报告（M1）](Docs/M1-acceptance-report.md)
+- [工具限制与 DSH restrict 验证（M3）](Docs/M3-tool-restriction.md)

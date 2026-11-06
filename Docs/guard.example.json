@@ -17,6 +17,7 @@
     "retentionDays": 30
   },
   "tools": {
+    "enforce": true,
     "allow": [],
     "deny": []
   }

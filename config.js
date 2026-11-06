@@ -32,6 +32,7 @@ const DEFAULT_CLASSIFIER_MAX_TOKENS = 200;
 const DEFAULT_AUDIT_ENABLED = true;
 const DEFAULT_AUDIT_STORE_TEXT = false;
 const DEFAULT_AUDIT_RETENTION_DAYS = 30;
+const DEFAULT_TOOLS_ENFORCE = true;
 
 const TOP_LEVEL_KEYS = new Set([
   'enabled',
@@ -55,7 +56,7 @@ const CLASSIFIER_KEYS = new Set([
 ]);
 
 const AUDIT_KEYS = new Set(['enabled', 'storeText', 'retentionDays']);
-const TOOLS_KEYS = new Set(['allow', 'deny']);
+const TOOLS_KEYS = new Set(['enforce', 'allow', 'deny']);
 
 const NESTED_KEYS = {
   classifier: CLASSIFIER_KEYS,
@@ -363,11 +364,16 @@ export function validateConfig(input) {
   }
 
   const tools = {
+    enforce: DEFAULT_TOOLS_ENFORCE,
     allow: [],
     deny: [],
   };
   const suppliedTools = input.tools;
   if (suppliedTools !== undefined) {
+    if (suppliedTools.enforce !== undefined) {
+      requireBoolean(suppliedTools.enforce, 'tools.enforce');
+      tools.enforce = suppliedTools.enforce;
+    }
     if (suppliedTools.allow !== undefined) {
       requireStringArray(suppliedTools.allow, 'tools.allow');
       tools.allow = [...suppliedTools.allow];

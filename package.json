@@ -22,6 +22,7 @@
     "gate.js",
     "audit-log.js",
     "pre-step.js",
+    "tool-policy.js",
     "types/contracts.d.ts",
     "locale/en.json",
     "locale/zh.json",
