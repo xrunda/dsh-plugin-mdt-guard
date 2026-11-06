@@ -8,6 +8,22 @@ export interface GateInput {
   recentMessages: ReadonlyArray<{ role: 'user' | 'assistant'; content: string }>;
   sessionState: SessionState;
   attachmentTypes?: ReadonlyArray<string>;
+  turn?: number;
+}
+
+export interface GateOutcome {
+  kind: 'enter' | 'reject';
+  decision: Decision;
+  category: Category | null;
+  reason: string;
+  confidence: number;
+  source: 'hard_deny' | 'fast_allow' | 'classifier' | 'degraded';
+  ruleId: string | null;
+  degraded: boolean;
+  errorCode: string | null;
+  sessionState: SessionState;
+  refusalText: string | null;
+  durationMs: number;
 }
 
 export interface GateDecision {

@@ -150,6 +150,7 @@ test('declaration file includes the approved structural contracts', async () => 
       recentMessages: ReadonlyArray<{ role: 'user' | 'assistant'; content: string }>;
       sessionState: SessionState;
       attachmentTypes?: ReadonlyArray<string>;
+      turn?: number;
     }`,
     `export interface GateDecision {
       decision: Decision;
