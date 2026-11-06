@@ -60,7 +60,7 @@ test('package manifest defines the private ESM bundle contract', async () => {
   assert.equal(manifest.exports?.['./rules'], './rules.js');
   // rule-defaults.js is a transitive import of both config.js and rules.js,
   // so it must ship.
-  for (const requiredPath of ['config.js', 'rules.js', 'rule-defaults.js']) {
+  for (const requiredPath of ['config.js', 'rules.js', 'rule-defaults.js', 'pre-step.js']) {
     assert.ok(files.includes(requiredPath), `files must include ${requiredPath}`);
   }
   for (const entry of files) {
@@ -119,21 +119,27 @@ test('localized metadata and package icon are present and local', async () => {
   );
 });
 
-test('plugin entry is callable and does not inspect context or config', async () => {
+test('plugin entry registers one gated pre-step listener and returns its cleanup', async () => {
   const plugin = await import('../index.js');
-  const accessedProperties = [];
-  const createThrowingProxy = (name) => new Proxy({}, {
+  const registrations = [];
+  const disposer = () => {};
+  const config = new Proxy({}, {
     get(_target, property) {
-      accessedProperties.push(`${name}.${String(property)}`);
-      throw new Error(`unexpected ${name} access: ${String(property)}`);
+      throw new Error(`unexpected config access: ${String(property)}`);
     },
   });
-  const context = createThrowingProxy('context');
-  const config = createThrowingProxy('config');
+  const context = {
+    on(event, listener) {
+      registrations.push({ event, listener });
+      return disposer;
+    },
+  };
 
   assert.equal(typeof plugin.apply, 'function');
-  assert.equal(plugin.apply(context, config), undefined);
-  assert.deepEqual(accessedProperties, [], 'entry must not register host resources');
+  assert.equal(plugin.apply(context, config), disposer);
+  assert.equal(registrations.length, 1);
+  assert.equal(registrations[0].event, 'agent/pre-step');
+  assert.equal(typeof registrations[0].listener, 'function');
 });
 
 test('declaration file includes the approved structural contracts', async () => {
