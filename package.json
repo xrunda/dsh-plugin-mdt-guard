@@ -19,6 +19,7 @@
     "session-state.js",
     "classifier-context.js",
     "classifier-client.js",
+    "gate.js",
     "types/contracts.d.ts",
     "locale/en.json",
     "locale/zh.json",

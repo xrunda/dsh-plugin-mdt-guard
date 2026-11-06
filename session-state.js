@@ -29,7 +29,8 @@ function requireDecision(decision) {
   if (!['allow', 'deny', 'unknown'].includes(decision.decision)) {
     throw new TypeError('session decision must be allow, deny or unknown');
   }
-  if (decision.decision === 'allow' && !IN_SCOPE_CATEGORIES.has(decision.category)
+  if (decision.decision === 'allow' && decision.category !== null
+    && !IN_SCOPE_CATEGORIES.has(decision.category)
     && !STATE_PRESERVING_CATEGORIES.has(decision.category)) {
     throw new TypeError('allow decision must have an A, B, C or D category');
   }
@@ -38,8 +39,9 @@ function requireDecision(decision) {
 /**
  * Return the next state for a decision against the current state.
  *
- * `allow` A/B enters `in_scope`; `allow` C/D keeps the current state; `deny`
- * enters `out_of_scope`; `unknown` resets to `unknown` (fail-open).
+ * `allow` A/B enters `in_scope`; `allow` C/D or a custom rule without a
+ * category keeps the current state; `deny` enters `out_of_scope`; `unknown`
+ * resets to `unknown` (fail-open).
  */
 export function nextSessionState(currentState, decision) {
   requireState(currentState);
