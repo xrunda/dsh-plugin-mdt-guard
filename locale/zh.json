@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "MDT 话题守卫",
-    "description": "供 DSH Host 使用的服务端 MDT 话题守卫，提供前置判定、分类调用与隐私优先审计。"
+    "description": "供 DSH Host 使用的服务端 MDT 话题守卫，提供前置判定、分类调用、会话级工具限制与隐私优先审计。"
   }
 }

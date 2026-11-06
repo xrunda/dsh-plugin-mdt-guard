@@ -52,6 +52,8 @@ function hostContext() {
     listeners,
     warnings,
     ctx: {
+      agents: { list: () => [] },
+      tools: { schemas: () => [] },
       on(event, listener) {
         listeners.push({ event, listener });
         return () => {};
@@ -94,7 +96,7 @@ test('apply wires a hard deny to reject, zero host steps, and a privacy-safe aud
   await writeGuardConfig(home, remoteConfig());
   const { ctx, listeners, warnings } = hostContext();
   apply(ctx, {});
-  assert.equal(listeners.length, 1);
+  assert.equal(listeners.length, 2);
   assert.equal(listeners[0].event, 'agent/pre-step');
   const { next, calls } = nextRecorder();
 

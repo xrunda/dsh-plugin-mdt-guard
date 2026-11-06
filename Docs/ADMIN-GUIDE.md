@@ -12,7 +12,7 @@
 
 确认以下条件：
 
-- DSH 已安装，`dsh --version` 为医院目标版本；本仓库只在 `0.2.1-rc.5` 做过隔离 profile 的安装/移除冒烟。
+- DSH 已安装，`dsh --version` 为医院目标版本；本仓库只在 `0.2.1-rc.5` 做过隔离 profile 的安装/移除冒烟。插件声明 `agents` 与 `tools` 为必需 Host 服务；目标版本缺少任一服务时整行不会激活，话题门禁也不会生效，需先确认服务可用。
 - 明确运行 DSH 的服务账号及其 `HOME`。配置和审计目录都基于该账号的 `HOME`，不是 `DSH_HOME`。
 - 已取得院内 OpenAI 兼容分类服务的地址、模型名；如需要，取得访问令牌与自签 CA 的 PEM 文件路径。
 - 分类服务必须位于院内网络。除配置的 `classifier.baseUrl` 外，本插件不访问其他网络服务，也没有遥测。
@@ -112,7 +112,7 @@ install -m 0600 /opt/dsh-mdt-guard/Docs/guard.example.json "$HOME/.dsh/mdt/guard
 
 配置文件可能有 `classifier.apiKey`，不要放开到其他用户可读，也不要提交到 Git。
 
-配置在 Host 进程首次收到待判定消息时读取并缓存。修改后必须重启 Host；当前版本不支持热加载。
+配置在 Host 进程首次创建 agent 或首次收到待判定消息时读取并缓存。修改后必须重启 Host；当前版本不支持热加载。
 
 ### 3.2 最小配置
 
@@ -136,13 +136,14 @@ install -m 0600 /opt/dsh-mdt-guard/Docs/guard.example.json "$HOME/.dsh/mdt/guard
     "retentionDays": 30
   },
   "tools": {
+    "enforce": true,
     "allow": [],
     "deny": []
   }
 }
 ```
 
-示例使用 `.invalid` 域名，不包含真实地址、密钥或证书。
+示例使用 `.invalid` 域名，不包含真实地址、密钥或证书。`tools.allow` 为空时不保留任何继承的全局工具；确认目标 profile 的实际工具名后按 3.5 节填写。
 
 ### 3.3 字段说明
 
@@ -163,8 +164,9 @@ install -m 0600 /opt/dsh-mdt-guard/Docs/guard.example.json "$HOME/.dsh/mdt/guard
 | `audit.enabled` | `true` | 是否写审计。`false` 时门禁仍生效，但不留判定记录。 |
 | `audit.storeText` | `false` | 是否保存用户原文。开启后审计文件会含患者/业务原文，必须评估隐私与合规风险。 |
 | `audit.retentionDays` | `30` | 保留天数；范围 1–3650。按 UTC 日期文件名清理。 |
-| `tools.allow` | `[]` | 已接受并规范化，但**当前版本未接入 `ctx.tools.restrict`**，不产生工具限制效果。 |
-| `tools.deny` | `[]` | 同上。 |
+| `tools.enforce` | `true` | 是否对所有会话安装工具限制。`false` 时保留 `tools.*` 配置但不调用 `ctx.tools.restrict`；仅在排障时临时使用。 |
+| `tools.allow` | `[]` | 会话可见工具白名单。空数组表示**不保留任何继承的全局工具**；只有当前 profile 已注册且可作为限制目标的名称才会生效。未注册名称被忽略；Host 拒绝的限制目标名称会触发默认拒绝降级（见 3.5 失败处理）。 |
+| `tools.deny` | `[]` | 在 `allow` 基础上额外禁止的工具；同一名称同时出现时 `deny` 优先。未知名称被忽略。 |
 
 未知字段会被拒绝并导致运行实例不启用；例如当前不支持 `classifier.proxyUrl`，写入它会得到 `CONFIG_UNKNOWN_FIELD`。需要代理的部署不在本版本能力内。
 
@@ -179,6 +181,27 @@ install -m 0600 /opt/dsh-mdt-guard/Docs/guard.example.json "$HOME/.dsh/mdt/guard
 5. 会话进入 `out_of_scope` 后，承接语（D 类）也会被拒绝；其他放行类别保持/进入相应状态。
 
 硬拒绝始终优先于快速放行。分类器调用不重试，单次超时即降级。
+
+### 3.5 工具限制
+
+插件在每个 agent 创建时通过 `agent.ctx.tools.restrict({ allow, deny })` 安装限制，覆盖已有 agent、后续 agent 和子 agent；工具循环内的后续 step 继续使用同一限制，不因无新用户消息而解除。
+
+字段语义：
+
+- `tools.enforce=false`：不安装限制，保留原有工具集。仅用于排障；医院生产环境应保持 `true`。
+- `tools.allow=[]` 且 `enforce=true`：默认拒绝所有继承的全局工具。这是未确认工具名时的安全默认值；agent 自作用域的机制性工具不受影响。
+- `tools.allow` 非空：只保留其中**当前已注册**的工具。白名单之外的全局工具全部隐藏。
+- `tools.deny`：在允许集合中再移除指定工具；`deny` 与 `allow` 冲突时 `deny` 优先。
+- 配置中不在当前 agent 可见工具集内的名称会被忽略，不会让 `restrict` 抛错，也不会因此放行其他工具。
+- `run_code` 是 DSH 保留的 PTC 传输名，不能被白名单或黑名单命名；插件会忽略配置中的该名称。
+
+若 profile 使用 DSH 的 `tools.mode: ptc`，保留的 `run_code` 传输在空允许列表下仍然可见。要按 FR-7 禁用脚本执行，目标 profile 应使用 DSH 默认的 `tools.mode: native`；PTC 模式的隔离效果取决于其运行时沙箱，需单独验收。
+
+**如何确认工具名**：工具名由目标 profile 实际加载的 DSH 工具插件决定，不能从本文档或 PRD 推断。上线前在医院目标 profile 中确认实际注册名，例如检查 `dsh --profile <profile> --dump-config` 输出中启用的工具包，再用测试会话验证允许与拒绝结果。未确认的名称不要写入 `tools.allow`。
+
+**失败处理**：配置读取/校验失败或工具 schema 读取失败时，插件记录固定告警并保持 fail-open，即不安装工具限制；这与 FR-10 一致，但意味着工具隔离此时不生效。若过滤被 Host 拒绝（例如配置名不是可限制目标），插件降级为 `allow=[]`，拒绝全部继承的全局工具；只有降级也失败时才保持 fail-open。审计和 Host 日志不会包含工具配置值或原始异常。
+
+**范围限制**：`restrict` 过滤 agent 继承的全局工具，不限制注册在该 agent 自身作用域的机制性工具；这是 DSH 的既定语义。文件沙箱与路径边界仍由 DSH 宿主配置决定，不在本插件内实现（见 #13）。
 
 ## 4. 分类服务接口要求
 
@@ -225,7 +248,7 @@ Authorization: Bearer <apiKey>   # 仅在配置时
 node --test
 ```
 
-在 Node.js 24.13.0 下全量 149 个测试通过，包括 AC-1–AC-13 与 AC-14 等价服务端入口的本地回归。该结果不替代医院真实环境验收；其他 Node 版本需先运行测试，证书相关用例依赖 Node 的 TLS/OpenSSL 支持。
+在 Node.js 24.13.0 下全量 163 个测试通过，包括 AC-1–AC-13、AC-14 等价服务端入口以及工具限制策略的本地回归。该结果不替代医院真实环境验收；其他 Node 版本需先运行测试，证书相关用例依赖 Node 的 TLS/OpenSSL 支持。
 
 ### 5.2 检查配置能否解析
 
@@ -330,13 +353,15 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 - 分类失败按 `failOpen` 处理，并在审计标记 `degraded=true`。
 - 默认审计只保存用户消息摘要和长度；分类器 `reason` 仍会原样保存。不记录密钥、令牌、证书内容。
 - 自定义 CA；TLS 校验始终开启；无重试。
+- 工具限制按 agent 安装：默认 `allow=[]` 拒绝全部继承的全局工具，`deny` 优先，不可作为限制目标的名称会触发默认拒绝降级。
 - 配置/规则/分类错误信息不包含用户原文或配置值。
 
 ### 8.2 尚未实现或未验证
 
 - **固定拒答文案不可见。** DSH 默认 Web Chat 不为 `blocked` 生成 failure row；当前只能阻断本轮，用户可能看到“消息已发送但无回答”。这是发布阻断项，见 #6。
 - **被拒输入不进入会话历史。** Host 在 reject 前领取输入，官方行为不写 `user/message`，与 PRD FR-5 不一致。
-- **工具白名单未生效。** `tools.*` 仅被配置解析，当前没有调用 `ctx.tools.restrict`；不能把本插件当作工具隔离控制，见 #12。
+- **工具名与真实 profile 未验收。** 默认 `allow=[]` 的安全语义已由本地测试覆盖，但目标医院 profile 实际注册了哪些工具、web/桌面/CLI 是否得到相同工具集，必须在 #16 的医院环境确认；不能把本地测试当作医院工具矩阵。
+- **工具限制失败时的边界。** 配置/schema 不可用时不安装限制（fail-open）；过滤被 Host 拒绝时降级为拒绝全部继承工具；降级也失败时才完全 fail-open。三种情况都只能依赖 Host 日志中的固定告警发现。
 - **沙箱策略未接入。** 文件读写范围由 DSH 沙箱/宿主配置决定，本插件没有额外文件访问控制，见 #13。
 - **代理未开放配置。** `classifier-client` 内部有代理能力，但 `guard.json` 不接受代理字段；需要代理的医院部署必须先完成 #16。
 - **真实客户端入口未验证。** 浏览器、桌面、CLI 的实际 `source.kind` 和 Host 拓扑必须在医院环境确认；本地测试只覆盖等价服务端 payload。
@@ -359,6 +384,8 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 4. 用第 5.3 节清单复测拒绝、放行与降级。
 5. 回滚时 remove 新版本、add 旧目录、恢复配置备份并重启。
 
+**升级注意：** 本版本开始实际执行 `tools.*`。旧配置中的 `"tools": { "allow": [], "deny": [] }` 在升级后会隐藏全部继承的全局工具，除非先写入已确认的工具名，或临时设置 `"enforce": false`。升级前必须在测试 profile 验证允许的工具仍可用。
+
 配置字段随版本变化时，启动日志的 `CONFIG_*` 错误码可用于定位；不要在未验证的情况下沿用旧版自定义规则。
 
 ## 10. 医院验收交接（#16）
@@ -369,8 +396,9 @@ jq -r 'select(.errorCode != null) | .errorCode' "$HOME/.dsh/mdt/guard-audit/"*.j
 - 固定拒答文案在目标客户端的可见性，以及被拒输入的留存决定；
 - 院内分类器的 A–I 判定准确率、延迟、超时与自定义 CA/代理连通性；
 - 拒绝轮次在上游回答模型网关侧无请求记录；
-- 工具限制与沙箱策略的实际配置方式（#12/#13）；
+- 目标 profile 的实际工具名、`tools.allow/deny` 配置结果，以及 web/桌面/CLI 的允许/拒绝集合是否一致（#12/#16）；
+- 沙箱与文件路径边界的实际配置方式（#13）；
 - 审计目录、权限、保留期与导出流程的信息科确认；
 - 记录测试版本、拓扑、证据、未通过项、负责人和后续 issue。
 
-相关背景与证据见 [M0 扩展点验证](M0-plugin-hook-validation.md)、[M0 分类服务协议与 CA 验证](M0-classifier-protocol-validation.md)、[M1 插件骨架与安装冒烟](M1-plugin-skeleton-validation.md)、[pre-step 适配边界](M1-pre-step-adapter.md) 与 [AC-1–AC-14 验收报告](M1-acceptance-report.md)。
+相关背景与证据见 [M0 扩展点验证](M0-plugin-hook-validation.md)、[M0 分类服务协议与 CA 验证](M0-classifier-protocol-validation.md)、[M1 插件骨架与安装冒烟](M1-plugin-skeleton-validation.md)、[pre-step 适配边界](M1-pre-step-adapter.md)、[AC-1–AC-14 验收报告](M1-acceptance-report.md) 与 [M3 工具限制验证](M3-tool-restriction.md)。
